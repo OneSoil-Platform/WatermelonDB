@@ -20,7 +20,8 @@
     "ktlint": "cd native/androidTest; ./gradlew ktlint",
     "ktlint:format": "cd native/androidTest; ./gradlew ktlintFormat",
     "android:emulator": "./scripts/emulatorWithJavaCheck",
-    "docs": "./scripts/mdbook"
+    "docs": "./scripts/mdbook",
+    "prepare": "yarn && yarn build && cp -r dist/* ."
   },
   "author": "@Nozbe",
   "homepage": "https://github.com/Nozbe/WatermelonDB#readme",
