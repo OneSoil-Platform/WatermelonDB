@@ -243,7 +243,7 @@ export default function applyRemoteChanges(
         ? unsafeBatchesWithRecordsToApply(db, recordsToApply, sendCreatedAsUpdated, log)
         : [
             db.batchArray(
-              ...prepareApplyAllRemoteChanges(db, recordsToApply, sendCreatedAsUpdated, log),
+              prepareApplyAllRemoteChanges(db, recordsToApply, sendCreatedAsUpdated, log),
             ),
           ]),
     ])
