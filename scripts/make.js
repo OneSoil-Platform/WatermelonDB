@@ -122,12 +122,15 @@ const copyNonJavaScriptFiles = buildPath => {
     'yarn.lock',
     'WatermelonDB.podspec',
     'docs',
+    'native/shared',
     'native/ios',
     'native/android',
-    'native/shared',
+    'native/android-jsi',
   ])
   cleanFolder(`${buildPath}/native/android/build`)
   cleanFolder(`${buildPath}/native/android/bin/build`)
+  cleanFolder(`${buildPath}/native/android-jsi/build`)
+  cleanFolder(`${buildPath}/native/android-jsi/bin/build`)
 }
 
 if (isDevelopment) {
@@ -156,6 +159,7 @@ if (isDevelopment) {
         resolvePath('src'),
         resolvePath('native/ios/WatermelonDB'),
         resolvePath('native/android/src/main'),
+        resolvePath('native/android-jsi/src/main'),
       ],
       {
         ignored: DO_NOT_BUILD_PATHS,

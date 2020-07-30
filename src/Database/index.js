@@ -132,11 +132,12 @@ export default class Database {
     })
 
     const affectedTables = Object.keys(changeNotifications)
-    this._subscribers.forEach(([tables, subscriber]) => {
+    const databaseChangeNotifySubscribers = ([tables, subscriber]): void => {
       if (tables.some(table => affectedTables.includes(table))) {
         subscriber()
       }
-    })
+    }
+    this._subscribers.forEach(databaseChangeNotifySubscribers)
     return undefined // shuts up flow
   }
 
@@ -147,6 +148,19 @@ export default class Database {
   //
   // See docs for more details and practical guide
   action<T>(work: ActionInterface => Promise<T>, description?: string): Promise<T> {
+    return this._actionQueue.enqueue(work, description)
+  }
+
+  /* EXPERIMENTAL API - DO NOT USE */
+  _write<T>(work: ActionInterface => Promise<T>, description?: string): Promise<T> {
+    return this._actionQueue.enqueue(work, description)
+  }
+
+  _read<T>(work: ActionInterface => Promise<T>, description?: string): Promise<T> {
+    return this._actionQueue.enqueue(work, description)
+  }
+
+  _together<T>(work: ActionInterface => Promise<T>, description?: string): Promise<T> {
     return this._actionQueue.enqueue(work, description)
   }
 
