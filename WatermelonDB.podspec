@@ -12,9 +12,7 @@ Pod::Spec.new do |s|
   s.author       = { "author" => package["author"] }
   s.platforms    = { :ios => "9.0", :tvos => "9.0" }
   s.source       = { :http => 'file:' + __dir__ + '/'  }
-  s.source_files = "native/ios/**/*.{h,m,mm,swift,c,cpp}", "native/shared/*.{h,c,cpp}"
-  s.public_header_files = '**/Bridging.h'
+  s.source_files = "native/ios/**/*.{h,m,swift}"
   s.requires_arc = true
   s.dependency "React"
-  s.dependency "React-jsi"
 end
