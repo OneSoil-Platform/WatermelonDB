@@ -7,6 +7,18 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		4801D9B124D30C54005BFC71 /* Database.h in Headers */ = {isa = PBXBuildFile; fileRef = 6EF7F85F2362E9100041E1F6 /* Database.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		4801D9B224D30C5D005BFC71 /* Sqlite.h in Headers */ = {isa = PBXBuildFile; fileRef = 6EBBB7152472B4A200E43F26 /* Sqlite.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		4801D9B324D30C62005BFC71 /* DatabasePlatform.h in Headers */ = {isa = PBXBuildFile; fileRef = 6E5E6258246C1F61003DBEF4 /* DatabasePlatform.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		4801D9B424D30C6B005BFC71 /* JSLockPerfHack.h in Headers */ = {isa = PBXBuildFile; fileRef = 6ED8793223665D8800F45881 /* JSLockPerfHack.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		48667E9224D30B2E0009782F /* JSIInstaller.h in Headers */ = {isa = PBXBuildFile; fileRef = 6EF7F86323630D790041E1F6 /* JSIInstaller.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		48AF4E0D24D30B9A00FB7F73 /* Bridging.h in Headers */ = {isa = PBXBuildFile; fileRef = 6E660D93213BD74F00189354 /* Bridging.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		48AF4E0E24D30BD800FB7F73 /* FMDatabase.h in Headers */ = {isa = PBXBuildFile; fileRef = 6E9477C9213BDE220077EDFB /* FMDatabase.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		48AF4E1024D30BD800FB7F73 /* FMResultSet.h in Headers */ = {isa = PBXBuildFile; fileRef = 6E9477CB213BDE220077EDFB /* FMResultSet.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		48AF4E1124D30BD800FB7F73 /* FMDatabasePool.h in Headers */ = {isa = PBXBuildFile; fileRef = 6E9477CC213BDE220077EDFB /* FMDatabasePool.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		48AF4E1424D30BD800FB7F73 /* FMDatabaseQueue.h in Headers */ = {isa = PBXBuildFile; fileRef = 6E9477CF213BDE220077EDFB /* FMDatabaseQueue.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		48AF4E1524D30BD800FB7F73 /* FMDB.h in Headers */ = {isa = PBXBuildFile; fileRef = 6E9477D0213BDE220077EDFB /* FMDB.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		48AF4E1624D30BD800FB7F73 /* FMDatabaseAdditions.h in Headers */ = {isa = PBXBuildFile; fileRef = 6E9477D1213BDE220077EDFB /* FMDatabaseAdditions.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		6E5E6259246C1F61003DBEF4 /* DatabasePlatformIOS.mm in Sources */ = {isa = PBXBuildFile; fileRef = 6E5E6257246C1F61003DBEF4 /* DatabasePlatformIOS.mm */; };
 		6E660D95213BD75D00189354 /* WatermelonDB.modulemap in CopyFiles */ = {isa = PBXBuildFile; fileRef = 6E660D94213BD74F00189354 /* WatermelonDB.modulemap */; };
 		6E9477D4213BDE2E0077EDFB /* FMDatabaseQueue.m in Sources */ = {isa = PBXBuildFile; fileRef = 6E9477CA213BDE220077EDFB /* FMDatabaseQueue.m */; };
@@ -173,11 +185,34 @@
 		};
 /* End PBXGroup section */
 
+/* Begin PBXHeadersBuildPhase section */
+		48667E8624D30B100009782F /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				48AF4E0D24D30B9A00FB7F73 /* Bridging.h in Headers */,
+				4801D9B124D30C54005BFC71 /* Database.h in Headers */,
+				4801D9B324D30C62005BFC71 /* DatabasePlatform.h in Headers */,
+				48AF4E0E24D30BD800FB7F73 /* FMDatabase.h in Headers */,
+				48AF4E1624D30BD800FB7F73 /* FMDatabaseAdditions.h in Headers */,
+				48AF4E1124D30BD800FB7F73 /* FMDatabasePool.h in Headers */,
+				48AF4E1424D30BD800FB7F73 /* FMDatabaseQueue.h in Headers */,
+				48AF4E1524D30BD800FB7F73 /* FMDB.h in Headers */,
+				48AF4E1024D30BD800FB7F73 /* FMResultSet.h in Headers */,
+				4801D9B424D30C6B005BFC71 /* JSLockPerfHack.h in Headers */,
+				4801D9B224D30C5D005BFC71 /* Sqlite.h in Headers */,
+				48667E9224D30B2E0009782F /* JSIInstaller.h in Headers */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXHeadersBuildPhase section */
+
 /* Begin PBXNativeTarget section */
 		6E660D5D213BCCD300189354 /* WatermelonDB */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 6E660D62213BCCD300189354 /* Build configuration list for PBXNativeTarget "WatermelonDB" */;
 			buildPhases = (
+				48667E8624D30B100009782F /* Headers */,
 				6E660D5A213BCCD300189354 /* Sources */,
 				6E660D5B213BCCD300189354 /* Frameworks */,
 				6E660D5C213BCCD300189354 /* CopyFiles */,
