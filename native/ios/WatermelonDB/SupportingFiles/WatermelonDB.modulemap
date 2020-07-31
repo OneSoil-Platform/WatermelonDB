@@ -1,4 +1,10 @@
 module WatermelonDB {
     header "WatermelonDB-Swift.h"
-    export *
+    header "JSIInstaller.h"
+    header "FMDatabase.h"
+    header "FMDatabaseAdditions.h"
+    header "FMDatabasePool.h"
+    header "FMDatabaseQueue.h"
+    header "FMDB.h"
+    header "FMResultSet.h"
 }
