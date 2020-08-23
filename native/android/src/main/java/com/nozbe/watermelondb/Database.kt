@@ -7,14 +7,14 @@ import java.io.File
 
 class Database(private val name: String, private val context: Context) {
 
-    private val db: SQLiteDatabasext.cacheDir.delete()
-            SQLiteDatabase.openOrCreateDatabase(
-                File(context.cacheDir, by lazy {
+    private val db: SQLiteDatabase by lazy {
         if (name == ":memory:" || name.contains("mode=memory")) {
             // TODO: This SUCKS. Seems like Android doesn't like sqlite `?mode=memory&cache=shared` mode. To avoid random breakages, save the file to /tmp, but this is slow.
             // NOTE: This is because Android system SQLite is not compiled with SQLITE_USE_URI=1
             // issue `PRAGMA cache=shared` query after connection when needed
-            conte name).path,
+            context.cacheDir.delete()
+            SQLiteDatabase.openOrCreateDatabase(
+                File(context.cacheDir, name).path,
                 null
             )
         } else
