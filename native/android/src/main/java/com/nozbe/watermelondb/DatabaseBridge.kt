@@ -9,11 +9,14 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.bridge.Arguments
 import kotlin.collections.ArrayList
+import java.util.logging.Logger
 
 class DatabaseBridge(private val reactContext: ReactApplicationContext) :
         ReactContextBaseJavaModule(reactContext) {
 
     private val connections: MutableMap<ConnectionTag, Connection> = mutableMapOf()
+
+    private val log: Logger? = if (BuildConfig.DEBUG) Logger.getLogger("DB_Bridge") else null
 
     override fun getName(): String = "DatabaseBridge"
 
@@ -109,6 +112,16 @@ class DatabaseBridge(private val reactContext: ReactApplicationContext) :
             disconnectDriver(tag)
             promise.reject(e)
         }
+    }
+
+    @ReactMethod
+    fun subscribe(tag: ConnectionTag, table: TableName, query: SQL, relatedTables: ReadableArray, promise: Promise) {
+        withDriver(tag, promise) { it.subscribe(table, relatedTables, query) }
+    }
+
+    @ReactMethod
+    fun subscribeBatch(tag: ConnectionTag, subscriptions: ReadableArray, promise: Promise) {
+        withDriver(tag, promise) { it.subscribeBatch(subscriptions) }
     }
 
     @ReactMethod

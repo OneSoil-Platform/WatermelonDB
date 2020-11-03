@@ -2,6 +2,8 @@ package com.nozbe.watermelondb
 
 import android.database.Cursor
 import com.facebook.react.bridge.WritableMap
+import com.facebook.react.bridge.WritableArray
+import com.facebook.react.bridge.ReadableArray
 
 typealias SQL = String
 typealias RecordID = String
@@ -10,8 +12,10 @@ typealias QueryArgs = Array<Any>
 typealias RawQueryArgs = Array<String>
 typealias ConnectionTag = Int
 typealias SchemaVersion = Int
+typealias RecordsToCache = WritableArray
 data class Schema(val version: SchemaVersion, val sql: SQL)
 data class MigrationSet(val from: SchemaVersion, val to: SchemaVersion, val sql: SQL)
+data class SubscriptionQuery(val table: TableName, val relatedTables: MutableList<TableName>, val sql: SQL, var records: MutableList<RecordID>, var count: Int)
 
 fun WritableMap.mapCursor(cursor: Cursor) {
     for (i in 0 until cursor.columnCount) {

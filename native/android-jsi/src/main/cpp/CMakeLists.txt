@@ -4,11 +4,12 @@ cmake_minimum_required(VERSION 3.4.1)
 # execute_process (COMMAND ln "-s" "src" "../../../../../node_modules/react-native/third-party/double-conversion-1.1.6/double-conversion")
 
 include_directories(
-        ../../../../../node_modules/@nozbe/sqlite/sqlite-amalgamation-3310100/
+        ../../../../../../../../node_modules/@nozbe/sqlite/sqlite-amalgamation-3310100/
         ../../../../shared
-        ../../../../../node_modules/react-native/React
-        ../../../../../node_modules/react-native/React/Base
-        ../../../../../node_modules/react-native/ReactCommon
+        ../../../../../../../../node_modules/react-native/React
+        ../../../../../../../../node_modules/react-native/React/Base
+        ../../../../../../../../node_modules/react-native/ReactCommon
+        ../../../../../../../../node_modules/react-native/ReactCommon/jsi
 # these seem necessary only if we import <jsi/JSIDynamic.h>
 #        ../../../../../node_modules/react-native/third-party/folly-2018.10.22.00
 #        ../../../../../node_modules/react-native/third-party/double-conversion-1.1.6
@@ -27,7 +28,7 @@ include_directories(
 
 add_library(watermelondb-jsi SHARED
             # sqlite3
-            ../../../../../node_modules/@nozbe/sqlite/sqlite-amalgamation-3310100/sqlite3.c
+            ../../../../../../../../node_modules/@nozbe/sqlite/sqlite-amalgamation-3310100/sqlite3.c
             # source files
             JSIInstaller.cpp
             DatabasePlatformAndroid.cpp
@@ -38,7 +39,8 @@ add_library(watermelondb-jsi SHARED
             ../../../../shared/DatabaseInstallation.cpp
             # this seems necessary to use almost any JSI API - otherwise we get linker errors
             # seems wrong to compile a file that's already getting compiled as part of the app, but ¯\_(ツ)_/¯
-            ../../../../../node_modules/react-native/ReactCommon/jsi/jsi.cpp)
+            ../../../../../../../../node_modules/react-native/ReactCommon/jsi/jsi/jsi.cpp
+            )
 
 target_link_libraries(watermelondb-jsi
                       # link with these libraries:
