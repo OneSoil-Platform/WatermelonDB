@@ -25,6 +25,8 @@ const dispatcherMethods = [
   'initialize',
   'setUpWithSchema',
   'setUpWithMigrations',
+  'subscribe',
+  'subscribeBatch',
   'find',
   'query',
   'count',

@@ -1,6 +1,7 @@
 #import <React/RCTBridgeModule.h>
+#import <React/RCTEventEmitter.h>
 
-@interface RCT_EXTERN_REMAP_MODULE(DatabaseBridge, DatabaseBridge, NSObject)
+@interface RCT_EXTERN_REMAP_MODULE(DatabaseBridge, DatabaseBridge, RCTEventEmitter)
 
 #define WMELON_CONCAT(A, B) A ## B
 #define WMELON_BRIDGE_METHOD(name, args) \
@@ -29,6 +30,16 @@ WMELON_BRIDGE_METHOD(setUpWithMigrations,
   migrations:(nonnull NSString *)migrationSQL
   fromVersion:(nonnull NSNumber *)version
   toVersion:(nonnull NSNumber *)version
+)
+
+WMELON_BRIDGE_METHOD(subscribe,
+  table:(nonnull NSString *)table
+  query:(nonnull NSString *)query
+  relatedTables:(NSArray<NSString *>*)relatedTables
+)
+
+WMELON_BRIDGE_METHOD(subscribeBatch,
+  subscriptions:(NSArray *)subscriptions
 )
 
 WMELON_BRIDGE_METHOD(find,

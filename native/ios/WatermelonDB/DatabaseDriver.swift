@@ -43,6 +43,46 @@ class DatabaseDriver {
         self.database = Database(path: getPath(dbName: dbName))
     }
 
+    func subscribe(table: Database.TableName, relatedTables: [Database.TableName], query: Database.SQL) throws -> Bool {
+        var subscriptionQuery = subscribeQuery(table: table, relatedTables: relatedTables, query: query)
+
+        let result = try querySubscription(&subscriptionQuery)
+        if (result != nil) {
+            sendQueriesResults([result!])
+        } else {
+            let toCache: [Dictionary<AnyHashable, Any>] = []
+            sendQueriesResults([(toCache: toCache, subscriptionQuery: subscriptionQuery)])
+        }
+
+        return true
+    }
+
+    func subscribeBatch(_ subscriptions: [(table: Database.TableName, relatedTables: [Database.TableName], query: Database.SQL)]) throws -> Bool {
+        var results: [(toCache: [Dictionary<AnyHashable, Any>], subscriptionQuery: SubscriptionQuery)] = [];
+
+        for subscription in subscriptions {
+            var subscriptionQuery = subscribeQuery(
+                table: subscription.table,
+                relatedTables: subscription.relatedTables,
+                query: subscription.query
+            )
+
+            let result = try querySubscription(&subscriptionQuery)
+            if result != nil {
+                results.append(result!)
+            } else {
+                let toCache: [Dictionary<AnyHashable, Any>] = []
+                results.append((toCache: toCache, subscriptionQuery: subscriptionQuery))
+            }
+        }
+
+        if results.count > 0 {
+            sendQueriesResults(results)
+        }
+
+        return true
+    }
+
     func find(table: Database.TableName, id: RecordId) throws -> Any? {
         guard !isCached(table, id) else {
             return id
@@ -88,25 +128,30 @@ class DatabaseDriver {
     func batch(_ operations: [Operation]) throws {
         var newIds: [(Database.TableName, RecordId)] = []
         var removedIds: [(Database.TableName, RecordId)] = []
+        var tables: [Database.TableName] = []
 
         try database.inTransaction {
             for operation in operations {
                 switch operation {
-                case .execute(table: _, query: let query, args: let args):
+                case .execute(table: let table, query: let query, args: let args):
                     try database.execute(query, args)
+                    tables.append(table)
 
                 case .create(table: let table, id: let id, query: let query, args: let args):
                     try database.execute(query, args)
                     newIds.append((table, id))
+                    tables.append(table)
 
                 case .markAsDeleted(table: let table, id: let id):
                     try database.execute("update `\(table)` set _status='deleted' where id == ?", [id])
                     removedIds.append((table, id))
+                    tables.append(table)
 
                 case .destroyPermanently(table: let table, id: let id):
                     // TODO: What's the behavior if nothing got deleted?
                     try database.execute("delete from `\(table)` where id == ?", [id])
                     removedIds.append((table, id))
+                    tables.append(table)
                 }
             }
         }
@@ -118,6 +163,8 @@ class DatabaseDriver {
         for (table, id) in removedIds {
             removeFromCache(table, id)
         }
+
+        try requerySubscriptions(tables)
     }
 
     func getDeletedRecords(table: Database.TableName) throws -> [RecordId] {
@@ -130,6 +177,7 @@ class DatabaseDriver {
         // TODO: What's the behavior if record doesn't exist or isn't actually deleted?
         let recordPlaceholders = records.map { _ in "?" }.joined(separator: ",")
         try database.execute("delete from `\(table)` where id in (\(recordPlaceholders))", records)
+        try requerySubscriptions([table])
     }
 
 // MARK: - LocalStorage
@@ -155,10 +203,140 @@ class DatabaseDriver {
 // MARK: - Record caching
 
     typealias RecordId = String
+    struct SubscriptionQuery {
+        let table: Database.TableName
+        let relatedTables: Set<Database.TableName>
+        let sql: Database.SQL
+        var records: [RecordId] = []
+        var count: Int = -1
+    }
 
     // Rewritten to use good ol' mutable Objective C for performance
     // The swifty implementation in debug took >100s to execute on a 65K batch. This: 6ms. Yes. Really.
     private var cachedRecords: NSMutableDictionary /* [TableName: Set<RecordId>] */ = NSMutableDictionary()
+    private var subscriptionQueries: [SubscriptionQuery] = []
+
+    private func subscribeQuery(table: Database.TableName, relatedTables: [Database.TableName], query: Database.SQL) -> SubscriptionQuery {
+        for subscriptionQuery in subscriptionQueries {
+            if subscriptionQuery.sql == query {
+                return subscriptionQuery
+            }
+        }
+        let subscriptionQuery = SubscriptionQuery(
+            table: table,
+            relatedTables: Set(relatedTables),
+            sql: query
+        )
+        subscriptionQueries.append(subscriptionQuery)
+
+        return subscriptionQuery
+    }
+
+    private func requerySubscriptions(_ tables: [Database.TableName]) throws {
+        var results: [(toCache: [Dictionary<AnyHashable, Any>], subscriptionQuery: SubscriptionQuery)] = [];
+        for var subscription in subscriptionQueries {
+            for table in tables {
+                if subscription.table == table || subscription.relatedTables.contains(table) {
+                    let result = try querySubscription(&subscription)
+                    if result != nil {
+                        results.append(result!)
+                    }
+                    break;
+                }
+            }
+        }
+
+        if results.count > 0 {
+            sendQueriesResults(results)
+        }
+    }
+
+    private func querySubscription(_ subscription: inout SubscriptionQuery) throws -> (toCache: [Dictionary<AnyHashable, Any>], subscriptionQuery: SubscriptionQuery)? {
+        var hasChanges = false
+        var toCache: [Dictionary<AnyHashable, Any>] = []
+        var resultArray: [RecordId] = []
+        try database.queryRaw(subscription.sql).forEach { row in
+            if row.columnIsNull("id") == false {
+
+                let id = row.string(forColumn: "id")!
+
+                if isCached(subscription.table, id) {
+                    if subscription.records.count <= 0 || subscription.records.contains(id) == false {
+                        hasChanges = true
+                    }
+                    resultArray.append(id)
+                } else {
+                    hasChanges = true
+                    markAsCached(subscription.table, id)
+                    resultArray.append(id)
+                    let dict = row.resultDictionary! as Dictionary
+                    toCache.append(dict)
+                }
+                subscription.records = resultArray
+                subscription.count = resultArray.count
+
+            } else if row.columnIsNull("count") == false {
+
+                let count = Int(row.string(forColumn: "count")!)!
+                hasChanges = subscription.count != count
+                subscription.count = count
+
+            }
+        }
+
+        if hasChanges == false {
+            return nil
+        }
+
+        return (toCache: toCache, subscriptionQuery: subscription);
+    }
+
+    private func sendQueriesResults(_ results: [(toCache: [Dictionary<AnyHashable, Any>], subscriptionQuery: SubscriptionQuery)]) {
+        var cacheByTable: [Database.TableName: [Dictionary<AnyHashable, Any>]] = [:]
+        var cacheIdsByTable: [Database.TableName: [RecordId]] = [:]
+        var resultsByQuery: [Database.SQL: (records: [RecordId], count: Int)] = [:]
+        let eventParams: NSMutableDictionary = NSMutableDictionary()
+
+        for result in results {
+            let records = result.toCache
+            let subscription = result.subscriptionQuery
+            let table = subscription.table
+            let query = subscription.sql
+
+            var cache = cacheByTable[table]
+            if cache == nil {
+                cache = [] as [Dictionary<AnyHashable, Any>]
+                cacheByTable[table] = cache
+            }
+
+            var cacheIds = cacheIdsByTable[table]
+            if cacheIds == nil {
+                cacheIds = [] as [RecordId]
+                cacheIdsByTable[table] = cacheIds
+            }
+
+            for record in records {
+                let id = record["id"]! as! RecordId
+                if cacheIds!.contains(id) == false {
+                    cache!.append(record)
+                    cacheIds!.append(id)
+                }
+            }
+
+            cacheByTable[table] = cache
+            cacheIdsByTable[table] = cacheIds
+
+            resultsByQuery[query] = (
+                records: subscription.records,
+                count: subscription.count
+            )
+        }
+
+        eventParams["toCache"] = cacheByTable
+        eventParams["results"] = resultsByQuery
+
+        DatabaseBridge.shared.sendEvent(withName: "QueriesResults", body: eventParams);
+    }
 
     func isCached(_ table: Database.TableName, _ id: RecordId) -> Bool {
         if let set = cachedRecords[table] as? NSSet {
