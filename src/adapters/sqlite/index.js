@@ -184,6 +184,32 @@ export default class SQLiteAdapter implements DatabaseAdapter, SQLDatabaseAdapte
     logger.log(`[WatermelonDB][SQLite] Schema set up successfully`)
   }
 
+  DebounceInterval = 50
+  subscribeQueryQueue = []
+  unsubscribeQueryQueue = []
+  debouncedSubscribe = debounce(() => {
+    this._dispatcher.subscribeBatch(this.subscribeQueryQueue)
+    this.subscribeQueryQueue = []
+  }, this.DebounceInterval)
+  debouncedUnsubscribe = debounce(() => {
+    this._dispatcher.unsubscribeBatch(this.unsubscribeQueryQueue)
+    this.unsubscribeQueryQueue = []
+  }, this.DebounceInterval)
+  subscribeQuery(table: TableName<any>, query: SerializedQuery | string, relatedTables: TableName<any>[], subscriber: (RecordId[]) => void): {id: string, unsubscribe: () => void} {
+    const sql = typeof query === "string" ? query : encodeQuery(query)
+
+    this.subscribeQueryQueue.push([table, sql, relatedTables || []])
+    this.debouncedSubscribe()
+
+    return {
+      id: sql,
+      unsubscribe: () => {
+        this.unsubscribeQueryQueue.push(sql)
+        this.debouncedUnsubscribe()
+      }
+    }
+  }
+
   find(table: TableName<any>, id: RecordId, callback: ResultCallback<CachedFindResult>): void {
     validateTable(table, this.schema)
     this._dispatcher.find(table, id, result =>

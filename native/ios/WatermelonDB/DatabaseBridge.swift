@@ -181,12 +181,30 @@ extension DatabaseBridge {
         }
     }
 
+    @objc(unsubscribe:query:resolve:reject:)
+    func unsubscribe(tag: ConnectionTag,
+                   query: Database.SQL,
+                   resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+        withDriver(tag, resolve, reject) {
+            try $0.unsubscribe(query) as Any
+        }
+    }
+
     @objc(subscribeBatch:subscriptions:resolve:reject:)
     func subscribeBatch(tag: ConnectionTag,
                    subscriptions: [[Any]],
                    resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
         withDriver(tag, resolve, reject) {
             try $0.subscribeBatch(self.toSubscriptionsList(subscriptions)) as Any
+        }
+    }
+
+    @objc(unsubscribeBatch:queries:resolve:reject:)
+    func unsubscribeBatch(tag: ConnectionTag,
+                   queries: [Database.SQL],
+                   resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+        withDriver(tag, resolve, reject) {
+            try $0.unsubscribeBatch(queries) as Any
         }
     }
 

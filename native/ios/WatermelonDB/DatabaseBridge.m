@@ -38,8 +38,16 @@ WMELON_BRIDGE_METHOD(subscribe,
   relatedTables:(NSArray<NSString *>*)relatedTables
 )
 
+WMELON_BRIDGE_METHOD(unsubscribe,
+  query:(nonnull NSString *)query
+)
+
 WMELON_BRIDGE_METHOD(subscribeBatch,
   subscriptions:(NSArray *)subscriptions
+)
+
+WMELON_BRIDGE_METHOD(unsubscribeBatch,
+  queries:(NSArray *)queries
 )
 
 WMELON_BRIDGE_METHOD(find,

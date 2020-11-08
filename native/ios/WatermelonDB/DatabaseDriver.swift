@@ -57,6 +57,11 @@ class DatabaseDriver {
         return true
     }
 
+    func unsubscribe(_ query: Database.SQL) throws -> Bool {
+        subscriptionQueries = subscriptionQueries.filter { $0.sql != query }
+        return true
+    }
+
     func subscribeBatch(_ subscriptions: [(table: Database.TableName, relatedTables: [Database.TableName], query: Database.SQL)]) throws -> Bool {
         var results: [(toCache: [Dictionary<AnyHashable, Any>], subscriptionQuery: SubscriptionQuery)] = [];
 
@@ -80,6 +85,11 @@ class DatabaseDriver {
             sendQueriesResults(results)
         }
 
+        return true
+    }
+
+    func unsubscribeBatch(_ queries: [Database.SQL]) throws -> Bool {
+        subscriptionQueries = subscriptionQueries.filter { !queries.contains($0.sql) }
         return true
     }
 
