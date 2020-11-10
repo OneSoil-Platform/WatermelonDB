@@ -58,7 +58,7 @@ class DatabaseDriver(context: Context, dbName: String) {
 
     private val cachedRecords: MutableMap<TableName, MutableList<RecordID>> = mutableMapOf()
 
-    private val subscriptionQueries: MutableList<SubscriptionQuery> = mutableListOf()
+    private var subscriptionQueries: MutableList<SubscriptionQuery> = mutableListOf()
 
     private fun subscribeQuery(table: TableName, relatedTables: ReadableArray?, query: SQL): SubscriptionQuery {
         for (i in 0 until subscriptionQueries.count()) {
@@ -97,7 +97,7 @@ class DatabaseDriver(context: Context, dbName: String) {
     }
 
     fun unsubscribe(query: SQL): Boolean {
-        subscriptionQueries = subscriptionQueries.filter { it.sql != query }
+        subscriptionQueries = subscriptionQueries.filter { it.sql != query } as MutableList<SubscriptionQuery>
         return true
     }
 
@@ -129,8 +129,12 @@ class DatabaseDriver(context: Context, dbName: String) {
     }
 
     fun unsubscribeBatch(queries: ReadableArray): Boolean {
-        val queriesList: MutableList<RecordID> = mutableListOf(queries)
-        subscriptionQueries = subscriptionQueries.filter { !queriesList.contains(it.sql) }
+        val queriesList: MutableList<SQL> = mutableListOf()
+        for (i in 0 until queries.size()) {
+            val query = queries.getString(i) as SQL
+            queriesList.add(query)
+        }
+        subscriptionQueries = subscriptionQueries.filter { !queriesList.contains(it.sql) } as MutableList<SubscriptionQuery>
         return true
     }
 
@@ -229,8 +233,11 @@ class DatabaseDriver(context: Context, dbName: String) {
             cacheByTable[table] = cache
             cacheIdsByTable[table] = cacheIds
 
-            toCacheMap.putArray(table, cache)
             resultsMap.putMap(query, resultsList)
+        }
+
+        for (cache in cacheByTable.iterator()) {
+            toCacheMap.putArray(cache.key, cache.value)
         }
 
         eventParams.putMap("toCache", toCacheMap)

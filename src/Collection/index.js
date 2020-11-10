@@ -1,6 +1,6 @@
 // @flow
 
-import { NativeEventEmitter, NativeModules } from 'react-native';
+import { NativeEventEmitter, NativeModules } from 'react-native'
 import { Observable } from 'rxjs/Observable'
 import { Subject } from 'rxjs/Subject'
 import invariant from '../utils/common/invariant'
@@ -13,12 +13,12 @@ import type Database from '../Database'
 import type Model, { RecordId } from '../Model'
 import type { Clause } from '../QueryDescription'
 import { type TableName, type TableSchema } from '../Schema'
-import { type DirtyRaw } from '../RawRecord'
+import { type DirtyRaw, sanitizedRaw } from '../RawRecord'
 
 import RecordCache from './RecordCache'
 import { CollectionChangeTypes } from './common'
 
-const databaseEmitter = new NativeEventEmitter(NativeModules.DatabaseBridge);
+const databaseEmitter = new NativeEventEmitter(NativeModules.DatabaseBridge)
 
 type CollectionChangeType = 'created' | 'updated' | 'destroyed'
 export type CollectionChange<Record: Model> = { record: Record, type: CollectionChangeType }
@@ -45,7 +45,7 @@ export default class Collection<Record: Model> {
       if (toCache && Object.keys(toCache).length) {
         for (let table in toCache) {
           for (let record of toCache[table]) {
-            this._cache.add(new ModelClass(this, record));
+            this._cache.add(new ModelClass(this, sanitizedRaw(record, this.schema)))
           }
         }
       }
@@ -58,7 +58,7 @@ export default class Collection<Record: Model> {
           }
         }
       }
-    });
+    })
   }
 
   get db(): Database {
@@ -71,21 +71,28 @@ export default class Collection<Record: Model> {
         const cachedRecords = this._cache.recordsFromQueryResult(records)
         observer.next(cachedRecords)
       }
-      const { id, unsubscribe } = this.database.adapter.underlyingAdapter.subscribeQuery(this.table, sql, relatedTables)
+      const { id, unsubscribe } = this.database.adapter.underlyingAdapter.subscribeQuery(
+        this.table,
+        sql,
+        relatedTables,
+      )
       if (this._subscriptionQueries[id]) {
         this._subscriptionQueries[id].subscribers.push(subscriber)
       } else {
         this._subscriptionQueries[id] = {
-          id, subscribers: []
+          id,
+          subscribers: [],
         }
       }
       return () => {
-        this._subscriptionQueries[id].subscribers = this._subscriptionQueries[id].subscribers.filter(s => s !== subscriber)
+        this._subscriptionQueries[id].subscribers = this._subscriptionQueries[
+          id
+        ].subscribers.filter(s => s !== subscriber)
         if (!this._subscriptionQueries[id].subscribers.length) {
           unsubscribe && unsubscribe()
         }
       }
-    });
+    })
   }
 
   observeQuery(query: Query<Record>): Observable<Record[]> {
@@ -94,21 +101,28 @@ export default class Collection<Record: Model> {
         const cachedRecords = this._cache.recordsFromQueryResult(records)
         observer.next(cachedRecords)
       }
-      const { id, unsubscribe } = this.database.adapter.underlyingAdapter.subscribeQuery(this.table, query.serialize(), query.secondaryTables)
+      const { id, unsubscribe } = this.database.adapter.underlyingAdapter.subscribeQuery(
+        this.table,
+        query.serialize(),
+        query.secondaryTables,
+      )
       if (this._subscriptionQueries[id]) {
         this._subscriptionQueries[id].subscribers.push(subscriber)
       } else {
         this._subscriptionQueries[id] = {
-          id, subscribers: []
+          id,
+          subscribers: [subscriber],
         }
       }
       return () => {
-        this._subscriptionQueries[id].subscribers = this._subscriptionQueries[id].subscribers.filter(s => s !== subscriber)
+        this._subscriptionQueries[id].subscribers = this._subscriptionQueries[
+          id
+        ].subscribers.filter(s => s !== subscriber)
         if (!this._subscriptionQueries[id].subscribers.length) {
           unsubscribe && unsubscribe()
         }
       }
-    });
+    })
   }
 
   observeCountQuery(query: Query<Record>): Observable<Record[]> {
@@ -116,21 +130,29 @@ export default class Collection<Record: Model> {
       const subscriber = ({ count }) => {
         observer.next(count)
       }
-      const { id, unsubscribe } = this.database.adapter.underlyingAdapter.subscribeQuery(this.table, query.serialize(), query.secondaryTables, true)
+      const { id, unsubscribe } = this.database.adapter.underlyingAdapter.subscribeQuery(
+        this.table,
+        query.serialize(),
+        query.secondaryTables,
+        true,
+      )
       if (this._subscriptionQueries[id]) {
         this._subscriptionQueries[id].subscribers.push(subscriber)
       } else {
         this._subscriptionQueries[id] = {
-          id, subscribers: []
+          id,
+          subscribers: [subscriber],
         }
       }
       return () => {
-        this._subscriptionQueries[id].subscribers = this._subscriptionQueries[id].subscribers.filter(s => s !== subscriber)
+        this._subscriptionQueries[id].subscribers = this._subscriptionQueries[
+          id
+        ].subscribers.filter(s => s !== subscriber)
         if (!this._subscriptionQueries[id].subscribers.length) {
           unsubscribe && unsubscribe()
         }
       }
-    });
+    })
   }
 
   // Finds a record with the given ID

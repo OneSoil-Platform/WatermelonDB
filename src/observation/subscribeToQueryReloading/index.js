@@ -19,8 +19,12 @@ export default function subscribeToQueryReloading<Record: Model>(
   shouldEmitStatus: boolean = false,
 ): Unsubscribe {
   const { collection } = query
-  let previousRecords: ?(Record[]) = null
+  let previousRecords: Record[] = []
   let unsubscribed = false
+
+  if (shouldEmitStatus) {
+    !unsubscribed && subscriber(false)
+  }
 
   const subscription = query.observeEvent().subscribe(records => {
     if (unsubscribed) {
@@ -41,7 +45,8 @@ export default function subscribeToQueryReloading<Record: Model>(
 
       const ids = previousRecords.map(r => r._raw.id)
       const records = collection._cache.recordsFromQueryResult(ids)
-      const shouldEmit = (shouldEmitStatus || !previousRecords || !identicalArrays(records, previousRecords))
+      const shouldEmit =
+        shouldEmitStatus || !previousRecords || !identicalArrays(records, previousRecords)
       if (shouldEmit) {
         previousRecords = records
         subscriber(records)

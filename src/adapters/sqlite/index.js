@@ -1,6 +1,6 @@
 // @flow
 /* eslint-disable global-require */
-import { debounce } from 'lodash';
+import { debounce } from 'lodash'
 
 import { connectionTag, type ConnectionTag, logger, invariant } from '../../utils/common'
 import { type ResultCallback, mapValue, toPromise, fromPromise } from '../../utils/fp/Result'
@@ -186,28 +186,36 @@ export default class SQLiteAdapter implements DatabaseAdapter, SQLDatabaseAdapte
   }
 
   DebounceInterval = 50
-  subscribeQueryQueue = []
-  unsubscribeQueryQueue = []
+  subscribeQueryQueue = {}
+  unsubscribeQueryQueue = {}
   debouncedSubscribe = debounce(() => {
-    this._dispatcher.subscribeBatch(this.subscribeQueryQueue, () => {})
-    this.subscribeQueryQueue = []
+    this._dispatcher.subscribeBatch(
+      Object.keys(this.subscribeQueryQueue).map(sql => this.subscribeQueryQueue[sql]),
+      () => {},
+    )
+    this.subscribeQueryQueue = {}
   }, this.DebounceInterval)
   debouncedUnsubscribe = debounce(() => {
-    this._dispatcher.unsubscribeBatch(this.unsubscribeQueryQueue, () => {})
-    this.unsubscribeQueryQueue = []
+    this._dispatcher.unsubscribeBatch(Object.keys(this.unsubscribeQueryQueue), () => {})
+    this.unsubscribeQueryQueue = {}
   }, this.DebounceInterval)
-  subscribeQuery(table: TableName<any>, query: SerializedQuery | string, relatedTables: TableName<any>[], countMode?: Boolean): {id: string, unsubscribe: () => void} {
-    const sql = typeof query === "string" ? query : encodeQuery(query, countMode)
+  subscribeQuery(
+    table: TableName<any>,
+    query: SerializedQuery | string,
+    relatedTables: TableName<any>[],
+    countMode?: Boolean,
+  ): { id: string, unsubscribe: () => void } {
+    const sql = typeof query === 'string' ? query : encodeQuery(query, countMode)
 
-    this.subscribeQueryQueue.push([table, sql, relatedTables || []])
+    this.subscribeQueryQueue[sql] = [table, sql, relatedTables || []]
     this.debouncedSubscribe()
 
     return {
       id: sql,
       unsubscribe: () => {
-        this.unsubscribeQueryQueue.push(sql)
+        this.unsubscribeQueryQueue[sql] = sql
         this.debouncedUnsubscribe()
-      }
+      },
     }
   }
 

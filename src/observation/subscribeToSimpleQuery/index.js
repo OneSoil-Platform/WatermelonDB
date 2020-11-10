@@ -57,8 +57,12 @@ export default function subscribeToSimpleQuery<Record: Model>(
   const matcher: Matcher<Record> = encodeMatcher(query.description)
   let unsubscribed = false
   let unsubscribe = null
-  let matchingRecords: Record[] = null
+  let matchingRecords: Record[] = []
   const emitCopy = () => !unsubscribed && subscriber(matchingRecords.slice(0))
+
+  if (alwaysEmit) {
+    !unsubscribed && subscriber(false)
+  }
 
   const subscription = query.observeEvent().subscribe(records => {
     if (unsubscribed) {
