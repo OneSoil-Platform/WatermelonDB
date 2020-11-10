@@ -120,8 +120,18 @@ class DatabaseBridge(private val reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
+    fun unsubscribe(tag: ConnectionTag, query: SQL, promise: Promise) {
+        withDriver(tag, promise) { it.unsubscribe(query) }
+    }
+
+    @ReactMethod
     fun subscribeBatch(tag: ConnectionTag, subscriptions: ReadableArray, promise: Promise) {
         withDriver(tag, promise) { it.subscribeBatch(subscriptions) }
+    }
+
+    @ReactMethod
+    fun unsubscribeBatch(tag: ConnectionTag, queries: ReadableArray, promise: Promise) {
+        withDriver(tag, promise) { it.unsubscribeBatch(queries) }
     }
 
     @ReactMethod

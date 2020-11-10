@@ -149,7 +149,7 @@ class DatabaseDriver {
 
                 case .create(table: let table, id: let id, query: let query, args: let args):
                     try database.execute(query, args)
-                    newIds.append((table, id))
+                    //newIds.append((table, id))
                     tables.append(table)
 
                 case .markAsDeleted(table: let table, id: let id):
@@ -304,7 +304,7 @@ class DatabaseDriver {
     private func sendQueriesResults(_ results: [(toCache: [Dictionary<AnyHashable, Any>], subscriptionQuery: SubscriptionQuery)]) {
         var cacheByTable: [Database.TableName: [Dictionary<AnyHashable, Any>]] = [:]
         var cacheIdsByTable: [Database.TableName: [RecordId]] = [:]
-        var resultsByQuery: [Database.SQL: (records: [RecordId], count: Int)] = [:]
+        var resultsByQuery: [Database.SQL: Dictionary<AnyHashable, Any>] = [:]
         let eventParams: NSMutableDictionary = NSMutableDictionary()
 
         for result in results {
@@ -336,10 +336,10 @@ class DatabaseDriver {
             cacheByTable[table] = cache
             cacheIdsByTable[table] = cacheIds
 
-            resultsByQuery[query] = (
-                records: subscription.records,
-                count: subscription.count
-            )
+            resultsByQuery[query] = [
+                "records": subscription.records,
+                "count": subscription.count
+            ]
         }
 
         eventParams["toCache"] = cacheByTable

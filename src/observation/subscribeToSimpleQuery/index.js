@@ -57,44 +57,34 @@ export default function subscribeToSimpleQuery<Record: Model>(
   const matcher: Matcher<Record> = encodeMatcher(query.description)
   let unsubscribed = false
   let unsubscribe = null
+  let matchingRecords: Record[] = null
+  const emitCopy = () => !unsubscribed && subscriber(matchingRecords.slice(0))
 
-  query.collection._fetchQuery(query, function observeQueryInitialEmission(result): void {
+  const subscription = query.observeEvent().subscribe(records => {
     if (unsubscribed) {
+      subscription.unsubscribe()
       return
     }
 
-    if (result.error) {
-      logError(result.error.toString())
-      return
-    }
-
-    const initialRecords = result.value
-
-    // Send initial matching records
-    const matchingRecords: Record[] = initialRecords
-    const emitCopy = () => !unsubscribed && subscriber(matchingRecords.slice(0))
+    matchingRecords = records
     emitCopy()
-
-    // Check if emitCopy haven't completed source observable to avoid memory leaks
-    if (unsubscribed) {
-      return
-    }
-
-    // Observe changes to the collection
-    const debugInfo = { name: 'subscribeToSimpleQuery', query, subscriber }
-    unsubscribe = query.collection.experimentalSubscribe(function observeQueryCollectionChanged(
-      changeSet,
-    ): void {
-      const shouldEmit = processChangeSet(changeSet, matcher, matchingRecords)
-      if (shouldEmit || alwaysEmit) {
-        emitCopy()
-      }
-    },
-    debugInfo)
   })
+
+  // Observe changes to the collection
+  const debugInfo = { name: 'subscribeToSimpleQuery', query, subscriber }
+  unsubscribe = query.collection.experimentalSubscribe(function observeQueryCollectionChanged(
+    changeSet,
+  ): void {
+    const shouldEmit = processChangeSet(changeSet, matcher, matchingRecords)
+    if (shouldEmit || alwaysEmit) {
+      emitCopy()
+    }
+  },
+  debugInfo)
 
   return () => {
     unsubscribed = true
     unsubscribe && unsubscribe()
+    subscription.unsubscribe()
   }
 }

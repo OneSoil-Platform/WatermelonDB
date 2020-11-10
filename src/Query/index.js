@@ -114,11 +114,20 @@ export default class Query<Record: Model> {
 
   // Emits an array of matching records, then emits a new array every time it changes
   observe(): Observable<Record[]> {
-    return Observable.create(observer =>
-      this._cachedSubscribable.subscribe(records => {
-        observer.next(records)
-      }),
-    )
+    return this.collection.observeQuery(this)
+    //return Observable.create(observer =>
+    //  this._cachedSubscribable.subscribe(records => {
+    //    observer.next(records)
+    //  }),
+    //)
+  }
+
+  observeEvent(): Observable<Record[]> {
+    return this.collection.observeQuery(this)
+  }
+
+  observeCountEvent(): Observable<Record[]> {
+    return this.collection.observeCountQuery(this)
   }
 
   // Same as `observe()` but also emits the list when any of the records

@@ -66,11 +66,11 @@ export default class RecordCache<Record: Model> {
     const cachedRecord = this.map.get(raw.id)
 
     if (cachedRecord) {
-      logError(
+      /*logError(
         `Record ${this.tableName}#${
           cachedRecord.id
         } is cached, but full raw object was sent over the bridge`,
-      )
+      )*/
       return cachedRecord
     }
 

@@ -65,11 +65,34 @@ export default class Collection<Record: Model> {
     return this.database
   }
 
+  observeSQL(sql: string, relatedTables: TableName[]): Observable<Record[]> {
+    return Observable.create(observer => {
+      const subscriber = ({ records }) => {
+        const cachedRecords = this._cache.recordsFromQueryResult(records)
+        observer.next(cachedRecords)
+      }
+      const { id, unsubscribe } = this.database.adapter.underlyingAdapter.subscribeQuery(this.table, sql, relatedTables)
+      if (this._subscriptionQueries[id]) {
+        this._subscriptionQueries[id].subscribers.push(subscriber)
+      } else {
+        this._subscriptionQueries[id] = {
+          id, subscribers: []
+        }
+      }
+      return () => {
+        this._subscriptionQueries[id].subscribers = this._subscriptionQueries[id].subscribers.filter(s => s !== subscriber)
+        if (!this._subscriptionQueries[id].subscribers.length) {
+          unsubscribe && unsubscribe()
+        }
+      }
+    });
+  }
+
   observeQuery(query: Query<Record>): Observable<Record[]> {
     return Observable.create(observer => {
       const subscriber = ({ records }) => {
-        const records = this._cache.recordsFromQueryResult(records)
-        observer.next(records)
+        const cachedRecords = this._cache.recordsFromQueryResult(records)
+        observer.next(cachedRecords)
       }
       const { id, unsubscribe } = this.database.adapter.underlyingAdapter.subscribeQuery(this.table, query.serialize(), query.secondaryTables)
       if (this._subscriptionQueries[id]) {
@@ -93,7 +116,7 @@ export default class Collection<Record: Model> {
       const subscriber = ({ count }) => {
         observer.next(count)
       }
-      const { id, unsubscribe } = this.database.adapter.underlyingAdapter.subscribeQuery(this.table, query.serialize(), query.secondaryTables)
+      const { id, unsubscribe } = this.database.adapter.underlyingAdapter.subscribeQuery(this.table, query.serialize(), query.secondaryTables, true)
       if (this._subscriptionQueries[id]) {
         this._subscriptionQueries[id].subscribers.push(subscriber)
       } else {

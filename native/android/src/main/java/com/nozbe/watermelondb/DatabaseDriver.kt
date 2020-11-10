@@ -96,6 +96,11 @@ class DatabaseDriver(context: Context, dbName: String) {
         return false
     }
 
+    fun unsubscribe(query: SQL): Boolean {
+        subscriptionQueries = subscriptionQueries.filter { it.sql != query }
+        return true
+    }
+
     fun subscribeBatch(subscriptions: ReadableArray): Boolean {
         val results: MutableList<Pair<RecordsToCache, SubscriptionQuery>> = mutableListOf();
 
@@ -120,6 +125,12 @@ class DatabaseDriver(context: Context, dbName: String) {
             sendQueriesResults(results)
         }
 
+        return true
+    }
+
+    fun unsubscribeBatch(queries: ReadableArray): Boolean {
+        val queriesList: MutableList<RecordID> = mutableListOf(queries)
+        subscriptionQueries = subscriptionQueries.filter { !queriesList.contains(it.sql) }
         return true
     }
 
@@ -337,7 +348,7 @@ class DatabaseDriver(context: Context, dbName: String) {
                             val query = operation.getString(3) as SQL
                             val args = operation.getArray(4)!!.toArrayList().toArray()
                             create(id, query, args)
-                            newIds.add(Pair(table, id))
+                            //newIds.add(Pair(table, id))
                             tables.add(table)
                         }
                         "markAsDeleted" -> {

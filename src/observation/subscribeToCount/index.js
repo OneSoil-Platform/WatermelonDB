@@ -42,33 +42,19 @@ export default function subscribeToCount<Record: Model>(
     return () => subscription.unsubscribe()
   }
 
-  const { collection } = query
   let unsubscribed = false
 
-  let previousCount = -1
-  const observeCountFetch = () => {
-    collection._fetchCount(query, result => {
-      if (result.error) {
-        logError(result.error.toString())
-        return
-      }
-
-      const count = result.value
-      const shouldEmit = count !== previousCount && !unsubscribed
-      previousCount = count
-      shouldEmit && subscriber(count)
-    })
-  }
-
-  const unsubscribe = collection.database.experimentalSubscribe(
-    query.allTables,
-    observeCountFetch,
-    { name: 'subscribeToCount', query, subscriber },
-  )
-  observeCountFetch()
+  const subscription = query.observeCountEvent().subscribe(count => {
+    if (unsubscribed) {
+      subscription.unsubscribe()
+      return
+    }
+    subscriber(count)
+  })
 
   return () => {
     unsubscribed = true
     unsubscribe()
+    subscription.unsubscribe()
   }
 }

@@ -22,35 +22,37 @@ export default function subscribeToQueryReloading<Record: Model>(
   let previousRecords: ?(Record[]) = null
   let unsubscribed = false
 
-  function reloadingObserverFetch(): void {
-    if (shouldEmitStatus) {
-      !unsubscribed && subscriber((false: any))
+  const subscription = query.observeEvent().subscribe(records => {
+    if (unsubscribed) {
+      subscription.unsubscribe()
+      return
     }
-
-    collection._fetchQuery(query, result => {
-      if (result.error) {
-        logError(result.error.toString())
-        return
-      }
-
-      const records = result.value
-      const shouldEmit =
-        !unsubscribed &&
-        (shouldEmitStatus || !previousRecords || !identicalArrays(records, previousRecords))
-      previousRecords = records
-      shouldEmit && subscriber(records)
-    })
-  }
+    previousRecords = records
+    subscriber(records)
+  })
 
   const unsubscribe = collection.database.experimentalSubscribe(
     query.allTables,
-    reloadingObserverFetch,
+    () => {
+      if (unsubscribed) {
+        subscription.unsubscribe()
+        return
+      }
+
+      const ids = previousRecords.map(r => r._raw.id)
+      const records = collection._cache.recordsFromQueryResult(ids)
+      const shouldEmit = (shouldEmitStatus || !previousRecords || !identicalArrays(records, previousRecords))
+      if (shouldEmit) {
+        previousRecords = records
+        subscriber(records)
+      }
+    },
     { name: 'subscribeToQueryReloading observation', query, subscriber },
   )
-  reloadingObserverFetch()
 
   return () => {
     unsubscribed = true
     unsubscribe()
+    subscription.unsubscribe()
   }
 }

@@ -1,5 +1,6 @@
 // @flow
 /* eslint-disable global-require */
+import { debounce } from 'lodash';
 
 import { connectionTag, type ConnectionTag, logger, invariant } from '../../utils/common'
 import { type ResultCallback, mapValue, toPromise, fromPromise } from '../../utils/fp/Result'
@@ -188,15 +189,15 @@ export default class SQLiteAdapter implements DatabaseAdapter, SQLDatabaseAdapte
   subscribeQueryQueue = []
   unsubscribeQueryQueue = []
   debouncedSubscribe = debounce(() => {
-    this._dispatcher.subscribeBatch(this.subscribeQueryQueue)
+    this._dispatcher.subscribeBatch(this.subscribeQueryQueue, () => {})
     this.subscribeQueryQueue = []
   }, this.DebounceInterval)
   debouncedUnsubscribe = debounce(() => {
-    this._dispatcher.unsubscribeBatch(this.unsubscribeQueryQueue)
+    this._dispatcher.unsubscribeBatch(this.unsubscribeQueryQueue, () => {})
     this.unsubscribeQueryQueue = []
   }, this.DebounceInterval)
-  subscribeQuery(table: TableName<any>, query: SerializedQuery | string, relatedTables: TableName<any>[], subscriber: (RecordId[]) => void): {id: string, unsubscribe: () => void} {
-    const sql = typeof query === "string" ? query : encodeQuery(query)
+  subscribeQuery(table: TableName<any>, query: SerializedQuery | string, relatedTables: TableName<any>[], countMode?: Boolean): {id: string, unsubscribe: () => void} {
+    const sql = typeof query === "string" ? query : encodeQuery(query, countMode)
 
     this.subscribeQueryQueue.push([table, sql, relatedTables || []])
     this.debouncedSubscribe()
