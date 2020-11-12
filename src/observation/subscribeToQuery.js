@@ -13,7 +13,5 @@ export default function subscribeToQuery<Record: Model>(
   query: Query<Record>,
   subscriber: (Record[]) => void,
 ): Unsubscribe {
-  return canEncodeMatcher(query.description)
-    ? subscribeToSimpleQuery(query, subscriber)
-    : subscribeToQueryReloading(query, subscriber)
+  return subscribeToQueryReloading(query, subscriber)
 }

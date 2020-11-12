@@ -43,8 +43,7 @@ export default function subscribeToQueryReloading<Record: Model>(
         return
       }
 
-      const ids = previousRecords.map(r => r._raw.id)
-      const records = collection._cache.recordsFromQueryResult(ids)
+      const records = previousRecords.map(r => collection._cache.get(r._raw.id)).filter(r => r)
       const shouldEmit =
         shouldEmitStatus || !previousRecords || !identicalArrays(records, previousRecords)
       if (shouldEmit) {

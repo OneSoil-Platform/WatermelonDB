@@ -169,6 +169,11 @@ class DatabaseDriver(context: Context, dbName: String) {
                     hasChanges = subscription.count != count
                     subscription.count = count
                 }
+            } else {
+                if (subscription.count != 0) {
+                    hasChanges = true
+                }
+                subscription.count = 0
             }
         }
 
@@ -347,7 +352,7 @@ class DatabaseDriver(context: Context, dbName: String) {
                             val query = operation.getString(2) as SQL
                             val args = operation.getArray(3)!!.toArrayList().toArray()
                             execute(query, args)
-                            tables.add(table)
+                            if (!tables.contains(table)) tables.add(table)
                         }
                         "create" -> {
                             val table = operation.getString(1) as TableName
@@ -356,21 +361,21 @@ class DatabaseDriver(context: Context, dbName: String) {
                             val args = operation.getArray(4)!!.toArrayList().toArray()
                             create(id, query, args)
                             //newIds.add(Pair(table, id))
-                            tables.add(table)
+                            if (!tables.contains(table)) tables.add(table)
                         }
                         "markAsDeleted" -> {
                             val table = operation.getString(1) as TableName
                             val id = operation.getString(2) as RecordID
                             database.execute(Queries.setStatusDeleted(table), arrayOf(id))
                             removedIds.add(Pair(table, id))
-                            tables.add(table)
+                            if (!tables.contains(table)) tables.add(table)
                         }
                         "destroyPermanently" -> {
                             val table = operation.getString(1) as TableName
                             val id = operation.getString(2) as RecordID
                             database.execute(Queries.destroyPermanently(table), arrayOf(id))
                             removedIds.add(Pair(table, id))
-                            tables.add(table)
+                            if (!tables.contains(table)) tables.add(table)
                         }
                         // "setLocal" -> {
                         //     val key = operation.getString(1)

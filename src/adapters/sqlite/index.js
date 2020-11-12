@@ -208,12 +208,18 @@ export default class SQLiteAdapter implements DatabaseAdapter, SQLDatabaseAdapte
     const sql = typeof query === 'string' ? query : encodeQuery(query, countMode)
 
     this.subscribeQueryQueue[sql] = [table, sql, relatedTables || []]
+    if (this.unsubscribeQueryQueue[sql]) {
+      delete this.unsubscribeQueryQueue[sql]
+    }
     this.debouncedSubscribe()
 
     return {
       id: sql,
       unsubscribe: () => {
         this.unsubscribeQueryQueue[sql] = sql
+        if (this.subscribeQueryQueue[sql]) {
+          delete this.subscribeQueryQueue[sql]
+        }
         this.debouncedUnsubscribe()
       },
     }
