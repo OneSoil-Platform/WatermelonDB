@@ -8,11 +8,13 @@ import com.facebook.react.bridge.ReadableArray
 typealias SQL = String
 typealias RecordID = String
 typealias TableName = String
+typealias ColumnName = String
 typealias QueryArgs = Array<Any>
 typealias RawQueryArgs = Array<String>
 typealias ConnectionTag = Int
 typealias SchemaVersion = Int
-typealias RecordsToCache = WritableArray
+typealias RecordsToCache = MutableList<Record>
+typealias Record = MutableMap<ColumnName, Any?>
 data class Schema(val version: SchemaVersion, val sql: SQL)
 data class MigrationSet(val from: SchemaVersion, val to: SchemaVersion, val sql: SQL)
 data class SubscriptionQuery(val table: TableName, val relatedTables: MutableList<TableName>, val sql: SQL, var records: MutableList<RecordID>, var count: Int)

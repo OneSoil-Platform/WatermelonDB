@@ -28,35 +28,14 @@ export default function subscribeToQueryReloading<Record: Model>(
 
   const subscription = query.observeEvent().subscribe(records => {
     if (unsubscribed) {
-      subscription.unsubscribe()
       return
     }
     previousRecords = records
     subscriber(records)
   })
 
-  const unsubscribe = collection.database.experimentalSubscribe(
-    query.allTables,
-    () => {
-      if (unsubscribed) {
-        subscription.unsubscribe()
-        return
-      }
-
-      const records = previousRecords.map(r => collection._cache.get(r._raw.id)).filter(r => r)
-      const shouldEmit =
-        shouldEmitStatus || !previousRecords || !identicalArrays(records, previousRecords)
-      if (shouldEmit) {
-        previousRecords = records
-        subscriber(records)
-      }
-    },
-    { name: 'subscribeToQueryReloading observation', query, subscriber },
-  )
-
   return () => {
     unsubscribed = true
-    unsubscribe()
     subscription.unsubscribe()
   }
 }

@@ -171,6 +171,12 @@ class DatabaseBridge(private val reactContext: ReactApplicationContext) :
     ) = withDriver(tag, promise) { it.unsafeResetDatabase(Schema(schemaVersion, schema)) }
 
     @ReactMethod
+    fun unsafeResetCache(
+        tag: ConnectionTag,
+        promise: Promise
+    ) = withDriver(tag, promise) { it.unsafeResetCache() }
+
+    @ReactMethod
     fun getLocal(tag: ConnectionTag, key: String, promise: Promise) =
             withDriver(tag, promise) { it.getLocal(key) }
 
