@@ -248,7 +248,7 @@ class DatabaseDriver(context: Context, dbName: String) {
                     }
                 }
                 argListRecords.pushMap(argRecord)
-                markAsCached(table, record["id"], record)
+                markAsCached(table, record["id"] as RecordID, record)
             }
             toCacheMap.putArray(table, argListRecords)
         }
