@@ -235,9 +235,9 @@ class DatabaseDriver(context: Context, dbName: String) {
             resultsMap.putMap(subscription.sql, resultsList)
         }
 
-        for (cache in cacheByTable) {
+        for ((table, listRecords) in cacheByTable) {
             val argListRecords = Arguments.createArray()
-            for ((id, record) in cache.value) {
+            for ((id, record) in listRecords) {
                 val argRecord = Arguments.createMap()
                 for ((column, value) in record) {
                     when (value) {
@@ -248,8 +248,9 @@ class DatabaseDriver(context: Context, dbName: String) {
                     }
                 }
                 argListRecords.pushMap(argRecord)
+                markAsCached(table, record["id"], record)
             }
-            toCacheMap.putArray(cache.key, argListRecords)
+            toCacheMap.putArray(table, argListRecords)
         }
 
         eventParams.putMap("toCache", toCacheMap)
@@ -268,7 +269,7 @@ class DatabaseDriver(context: Context, dbName: String) {
             }
             val resultMap = Arguments.createMap()
             it.moveToFirst()
-            markAsCached(table, id, cursorToMutableMap(it))
+            //markAsCached(table, id, cursorToMutableMap(it))
             resultMap.mapCursor(it)
             return resultMap
         }
@@ -284,7 +285,7 @@ class DatabaseDriver(context: Context, dbName: String) {
                     if (isCached(table, id)) {
                         resultArray.pushString(id)
                     } else {
-                        markAsCached(table, id, cursorToMutableMap(it))
+                        //markAsCached(table, id, cursorToMutableMap(it))
                         resultArray.pushMapFromCursor(it)
                     }
                 }
@@ -414,12 +415,12 @@ class DatabaseDriver(context: Context, dbName: String) {
             Trace.endSection()
         }
 
-        Trace.beginSection("updateCaches")
-        removedIds.forEach { removeFromCache(table = it.first, id = it.second) }
-        Trace.endSection()
-
         Trace.beginSection("requerySubscriptions")
         requerySubscriptions(tables)
+        Trace.endSection()
+
+        Trace.beginSection("updateCaches")
+        removedIds.forEach { removeFromCache(table = it.first, id = it.second) }
         Trace.endSection()
     }
 
@@ -433,6 +434,10 @@ class DatabaseDriver(context: Context, dbName: String) {
     fun unsafeResetCache() {
         log?.info("Unsafe Reset Cache")
         cachedRecords.clear()
+        for (subscriptionQuery in subscriptionQueries) {
+            subscriptionQuery.records = mutableListOf()
+            subscriptionQuery.count = -1
+        }
     }
 
     fun close() = database.close()
