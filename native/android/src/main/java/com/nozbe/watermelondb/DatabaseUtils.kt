@@ -17,7 +17,7 @@ typealias RecordsToCache = MutableList<Record>
 typealias Record = MutableMap<ColumnName, Any?>
 data class Schema(val version: SchemaVersion, val sql: SQL)
 data class MigrationSet(val from: SchemaVersion, val to: SchemaVersion, val sql: SQL)
-data class SubscriptionQuery(val table: TableName, val relatedTables: MutableList<TableName>, val sql: SQL, var records: MutableList<RecordID>, var count: Int)
+data class SubscriptionQuery(val table: TableName, val relatedTables: MutableList<TableName>, val sql: SQL, var records: MutableList<RecordID>, var count: Int, var raw: MutableList<Record>?)
 
 fun WritableMap.mapCursor(cursor: Cursor) {
     for (i in 0 until cursor.columnCount) {

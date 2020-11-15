@@ -65,49 +65,34 @@ export default class Collection<Record: Model> {
     return this.database
   }
 
-  observeSQL(sql: string, relatedTables: TableName[]): Observable<Record[]> {
+  observeSQL(
+    serializedQueryOrSQL: string,
+    relatedTables?: TableName[],
+    mode?: string, // count | raw
+  ): Observable<Record[]> {
     return Observable.create(observer => {
-      const subscriber = ({ records }) => {
-        const cachedRecords = this._cache.recordsFromQueryResult(records)
-        observer.next(cachedRecords)
+      const subscriber = ({ records, count, raw }) => {
+        switch (mode) {
+          case 'raw':
+            return observer.next(raw || [])
+          case 'count':
+            return observer.next(count)
+          default:
+            const cachedRecords = this._cache.recordsFromQueryResult(records)
+            return observer.next(cachedRecords)
+        }
       }
       const { id, unsubscribe } = this.database.adapter.underlyingAdapter.subscribeQuery(
         this.table,
-        sql,
+        serializedQueryOrSQL,
         relatedTables,
+        mode === 'count',
       )
       if (this._subscriptionQueries[id]) {
         this._subscriptionQueries[id].subscribers.push(subscriber)
-      } else {
-        this._subscriptionQueries[id] = {
-          id,
-          subscribers: [],
+        if (this._subscriptionQueries[id].results) {
+          subscriber(this._subscriptionQueries[id].results)
         }
-      }
-      return () => {
-        this._subscriptionQueries[id].subscribers = this._subscriptionQueries[
-          id
-        ].subscribers.filter(s => s !== subscriber)
-        if (!this._subscriptionQueries[id].subscribers.length) {
-          unsubscribe && unsubscribe()
-        }
-      }
-    })
-  }
-
-  observeQuery(query: Query<Record>): Observable<Record[]> {
-    return Observable.create(observer => {
-      const subscriber = ({ records }) => {
-        const cachedRecords = this._cache.recordsFromQueryResult(records)
-        observer.next(cachedRecords)
-      }
-      const { id, unsubscribe } = this.database.adapter.underlyingAdapter.subscribeQuery(
-        this.table,
-        query.serialize(),
-        query.secondaryTables,
-      )
-      if (this._subscriptionQueries[id]) {
-        this._subscriptionQueries[id].subscribers.push(subscriber)
       } else {
         this._subscriptionQueries[id] = {
           id,
@@ -123,36 +108,22 @@ export default class Collection<Record: Model> {
         }
       }
     })
+  }
+
+  observeRaw(sql: string, relatedTables?: TableName[]): Observable<Record[]> {
+    return this.observeSQL(sql, relatedTables, 'raw')
+  }
+
+  observeCountSQL(sql: string, relatedTables?: TableName[]): Observable<Record[]> {
+    return this.observeSQL(sql, relatedTables, 'count')
+  }
+
+  observeQuery(query: Query<Record>, mode?: string): Observable<Record[]> {
+    return this.observeSQL(query.serialize(), query.secondaryTables, mode)
   }
 
   observeCountQuery(query: Query<Record>): Observable<Record[]> {
-    return Observable.create(observer => {
-      const subscriber = ({ count }) => {
-        observer.next(count)
-      }
-      const { id, unsubscribe } = this.database.adapter.underlyingAdapter.subscribeQuery(
-        this.table,
-        query.serialize(),
-        query.secondaryTables,
-        true,
-      )
-      if (this._subscriptionQueries[id]) {
-        this._subscriptionQueries[id].subscribers.push(subscriber)
-      } else {
-        this._subscriptionQueries[id] = {
-          id,
-          subscribers: [subscriber],
-        }
-      }
-      return () => {
-        this._subscriptionQueries[id].subscribers = this._subscriptionQueries[
-          id
-        ].subscribers.filter(s => s !== subscriber)
-        if (!this._subscriptionQueries[id].subscribers.length) {
-          unsubscribe && unsubscribe()
-        }
-      }
-    })
+    return this.observeQuery(query, 'count')
   }
 
   // Finds a record with the given ID

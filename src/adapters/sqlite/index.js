@@ -189,23 +189,25 @@ export default class SQLiteAdapter implements DatabaseAdapter, SQLDatabaseAdapte
   subscribeQueryQueue = {}
   unsubscribeQueryQueue = {}
   debouncedSubscribe = debounce(() => {
-    this._dispatcher.subscribeBatch(
-      Object.keys(this.subscribeQueryQueue).map(sql => this.subscribeQueryQueue[sql]),
-      () => {},
-    )
+    const list = Object.keys(this.subscribeQueryQueue).map(sql => this.subscribeQueryQueue[sql])
+    list.length && this._dispatcher.subscribeBatch(list, () => {})
     this.subscribeQueryQueue = {}
   }, this.DebounceInterval)
   debouncedUnsubscribe = debounce(() => {
-    this._dispatcher.unsubscribeBatch(Object.keys(this.unsubscribeQueryQueue), () => {})
+    const list = Object.keys(this.unsubscribeQueryQueue)
+    list.length && this._dispatcher.unsubscribeBatch(list, () => {})
     this.unsubscribeQueryQueue = {}
   }, this.DebounceInterval)
   subscribeQuery(
     table: TableName<any>,
-    query: SerializedQuery | string,
-    relatedTables: TableName<any>[],
+    serializedQueryOrSQL: SerializedQuery | string,
+    relatedTables?: TableName<any>[],
     countMode?: Boolean,
   ): { id: string, unsubscribe: () => void } {
-    const sql = typeof query === 'string' ? query : encodeQuery(query, countMode)
+    const sql =
+      typeof serializedQueryOrSQL === 'string'
+        ? serializedQueryOrSQL
+        : encodeQuery(serializedQueryOrSQL, countMode)
 
     this.subscribeQueryQueue[sql] = [table, sql, relatedTables || []]
     if (this.unsubscribeQueryQueue[sql]) {

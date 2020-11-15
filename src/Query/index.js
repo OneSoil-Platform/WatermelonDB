@@ -58,11 +58,6 @@ export default class Query<Record: Model> {
     subscribeToCount(this, false, subscriber),
   )
 
-  @lazy
-  _cachedCountThrottledSubscribable: SharedSubscribable<number> = new SharedSubscribable(
-    subscriber => subscribeToCount(this, true, subscriber),
-  )
-
   // Note: Don't use this directly, use Collection.query(...)
   constructor(collection: Collection<Record>, clauses: Clause[]): void {
     this.collection = collection
@@ -161,10 +156,7 @@ export default class Query<Record: Model> {
   // Note: By default, the Observable is throttled!
   observeCount(isThrottled: boolean = true): Observable<number> {
     return Observable.create(observer => {
-      const subscribable = isThrottled
-        ? this._cachedCountThrottledSubscribable
-        : this._cachedCountSubscribable
-      return subscribable.subscribe(count => {
+      return this._cachedCountSubscribable.subscribe(count => {
         observer.next(count)
       })
     })
