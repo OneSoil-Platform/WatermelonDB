@@ -146,12 +146,16 @@ class DatabaseDriver(context: Context, dbName: String) {
         val toCache: RecordsToCache = mutableListOf()
         database.rawQuery(subscription.sql).use {
             if (it.count > 0) {
+                if (subscription.count <= 0 || subscription.count != it.count) {
+                    hasChanges = true
+                }
+
                 if (it.columnNames.contains("id")) {
                     val resultArray: MutableList<RecordID> = mutableListOf()
                     while (it.moveToNext()) {
                         val id = it.getString(it.getColumnIndex("id"))
                         if (isCachedRecord(subscription.table, id, cursorToMutableMap(it))) {
-                            if (subscription.records.count() <= 0 || !subscription.records.contains(id)) {
+                            if (!hasChanges && !subscription.records.contains(id)) {
                                 hasChanges = true
                             }
                             resultArray.add(id)
