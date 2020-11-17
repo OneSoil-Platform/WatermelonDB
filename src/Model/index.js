@@ -295,11 +295,11 @@ export default class Model {
 
   _setRaw(rawFieldName: ColumnName, rawValue: Value): void {
     invariant(this._isEditing, 'Not allowed to change record outside of create/update()')
-    invariant(
-      !(this._getChanges(): $FlowFixMe<BehaviorSubject<any>>).isStopped &&
-        this._raw._status !== 'deleted',
-      'Not allowed to change deleted records',
-    )
+    // invariant(
+    //   !(this._getChanges(): $FlowFixMe<BehaviorSubject<any>>).isStopped &&
+    //     this._raw._status !== 'deleted',
+    //   'Not allowed to change deleted records',
+    // )
 
     const valueBefore = this._raw[(rawFieldName: string)]
     setRawSanitized(this._raw, rawFieldName, rawValue, this.collection.schema.columns[rawFieldName])
@@ -313,11 +313,11 @@ export default class Model {
   // hard about risks of inconsistency after sync
   _dangerouslySetRawWithoutMarkingColumnChange(rawFieldName: ColumnName, rawValue: Value): void {
     invariant(this._isEditing, 'Not allowed to change record outside of create/update()')
-    invariant(
-      !(this._getChanges(): $FlowFixMe<BehaviorSubject<any>>).isStopped &&
-        this._raw._status !== 'deleted',
-      'Not allowed to change deleted records',
-    )
+    // invariant(
+    //   !(this._getChanges(): $FlowFixMe<BehaviorSubject<any>>).isStopped &&
+    //     this._raw._status !== 'deleted',
+    //   'Not allowed to change deleted records',
+    // )
 
     setRawSanitized(this._raw, rawFieldName, rawValue, this.collection.schema.columns[rawFieldName])
   }
