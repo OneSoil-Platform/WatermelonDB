@@ -42,11 +42,9 @@ export default class Collection<Record: Model> {
     this._subscriptionQueries = []
 
     databaseEmitter.addListener('QueriesResults', ({ toCache, results }) => {
-      if (toCache && Object.keys(toCache).length) {
-        for (let table in toCache) {
-          for (let record of toCache[table]) {
-            this._cache.add(new ModelClass(this, sanitizedRaw(record, this.schema)))
-          }
+      if (toCache && toCache[ModelClass.table]) {
+        for (let record of toCache[ModelClass.table]) {
+          this._cache.add(new ModelClass(this, sanitizedRaw(record, this.schema)))
         }
       }
 
