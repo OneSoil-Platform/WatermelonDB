@@ -2,6 +2,7 @@
 
 import { logError } from '../../utils/common'
 import { type Unsubscribe } from '../../utils/subscriptions'
+import identicalArrays from '../../utils/fp/identicalArrays'
 
 import type { CollectionChangeSet } from '../../Collection'
 import { CollectionChangeTypes } from '../../Collection/common'
@@ -67,6 +68,9 @@ export default function subscribeToSimpleQuery<Record: Model>(
   const subscription = query.observeEvent().subscribe(records => {
     if (unsubscribed) {
       subscription.unsubscribe()
+      return
+    }
+    if (identicalArrays(matchingRecords, records)) {
       return
     }
 

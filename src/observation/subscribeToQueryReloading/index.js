@@ -30,6 +30,10 @@ export default function subscribeToQueryReloading<Record: Model>(
     if (unsubscribed) {
       return
     }
+    if (identicalArrays(matchingRecords, records)) {
+      return
+    }
+
     previousRecords = records
     subscriber(records)
   })
