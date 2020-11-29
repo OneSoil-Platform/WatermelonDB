@@ -46,9 +46,11 @@ class DatabaseDriver {
     func subscribe(table: Database.TableName, relatedTables: [Database.TableName], query: Database.SQL) throws -> Bool {
         var subscriptionQuery = subscribeQuery(table: table, relatedTables: relatedTables, query: query)
 
-        let result = try querySubscription(&subscriptionQuery)
-        if (result != nil) {
-            sendQueriesResults([result!])
+        if (subscriptionQuery.count < 0) {
+            let result = try querySubscription(&subscriptionQuery)
+            if (result != nil) {
+                sendQueriesResults([result!])
+            }
         } else {
             let toCache: [Dictionary<AnyHashable, Any>] = []
             sendQueriesResults([(toCache: toCache, subscriptionQuery: subscriptionQuery)])
@@ -72,9 +74,11 @@ class DatabaseDriver {
                 query: subscription.query
             )
 
-            let result = try querySubscription(&subscriptionQuery)
-            if result != nil {
-                results.append(result!)
+            if (subscriptionQuery.count < 0) {
+                let result = try querySubscription(&subscriptionQuery)
+                if result != nil {
+                    results.append(result!)
+                }
             } else {
                 let toCache: [Dictionary<AnyHashable, Any>] = []
                 results.append((toCache: toCache, subscriptionQuery: subscriptionQuery))
@@ -104,7 +108,7 @@ class DatabaseDriver {
             return nil
         }
 
-        markAsCached(table, id)
+        // markAsCached(table, id,row.resultDictionary!)
         return record.resultDictionary!
     }
 
@@ -115,7 +119,7 @@ class DatabaseDriver {
             if isCached(table, id) {
                 return id
             } else {
-                markAsCached(table, id)
+                //markAsCached(table, id, row.resultDictionary!)
                 return row.resultDictionary!
             }
         }
@@ -136,7 +140,6 @@ class DatabaseDriver {
     }
 
     func batch(_ operations: [Operation]) throws {
-        var newIds: [(Database.TableName, RecordId)] = []
         var removedIds: [(Database.TableName, RecordId)] = []
         var tables: [Database.TableName] = []
 
@@ -145,36 +148,39 @@ class DatabaseDriver {
                 switch operation {
                 case .execute(table: let table, query: let query, args: let args):
                     try database.execute(query, args)
-                    tables.append(table)
+                    if !tables.contains(table) {
+                        tables.append(table)
+                    }
 
-                case .create(table: let table, id: let id, query: let query, args: let args):
+                case .create(table: let table, id: _, query: let query, args: let args):
                     try database.execute(query, args)
-                    //newIds.append((table, id))
-                    tables.append(table)
+                    if !tables.contains(table) {
+                        tables.append(table)
+                    }
 
                 case .markAsDeleted(table: let table, id: let id):
                     try database.execute("update `\(table)` set _status='deleted' where id == ?", [id])
                     removedIds.append((table, id))
-                    tables.append(table)
+                    if !tables.contains(table) {
+                        tables.append(table)
+                    }
 
                 case .destroyPermanently(table: let table, id: let id):
                     // TODO: What's the behavior if nothing got deleted?
                     try database.execute("delete from `\(table)` where id == ?", [id])
                     removedIds.append((table, id))
-                    tables.append(table)
+                    if !tables.contains(table) {
+                        tables.append(table)
+                    }
                 }
             }
         }
 
-        for (table, id) in newIds {
-            markAsCached(table, id)
-        }
+        try requerySubscriptions(tables)
 
         for (table, id) in removedIds {
             removeFromCache(table, id)
         }
-
-        try requerySubscriptions(tables)
     }
 
     func getDeletedRecords(table: Database.TableName) throws -> [RecordId] {
@@ -213,17 +219,19 @@ class DatabaseDriver {
 // MARK: - Record caching
 
     typealias RecordId = String
+    typealias Record = [AnyHashable: Any]
     struct SubscriptionQuery {
         let table: Database.TableName
         let relatedTables: Set<Database.TableName>
         let sql: Database.SQL
         var records: [RecordId] = []
+        var raw: [Record]? = nil
         var count: Int = -1
     }
 
     // Rewritten to use good ol' mutable Objective C for performance
     // The swifty implementation in debug took >100s to execute on a 65K batch. This: 6ms. Yes. Really.
-    private var cachedRecords: NSMutableDictionary /* [TableName: Set<RecordId>] */ = NSMutableDictionary()
+    private var cachedRecords: NSMutableDictionary /* [TableName: Dictianary<RecordId: Record>] */ = NSMutableDictionary()
     private var subscriptionQueries: [SubscriptionQuery] = []
 
     private func subscribeQuery(table: Database.TableName, relatedTables: [Database.TableName], query: Database.SQL) -> SubscriptionQuery {
@@ -265,23 +273,26 @@ class DatabaseDriver {
         var hasChanges = false
         var toCache: [Dictionary<AnyHashable, Any>] = []
         var resultArray: [RecordId] = []
+        var resultRaw: [Record] = []
+        var i = 0
         try database.queryRaw(subscription.sql).forEach { row in
             if row.columnIsNull("id") == false {
 
                 let id = row.string(forColumn: "id")!
+                let oldId: RecordId? = subscription.records.indices.contains(i) ? subscription.records[i] : nil;
 
-                if isCached(subscription.table, id) {
-                    if subscription.records.count <= 0 || subscription.records.contains(id) == false {
+                let dict = row.resultDictionary! as Record
+                if isCachedRecord(subscription.table, id, dict) {
+                    if hasChanges == false && (oldId == nil || id != oldId) {
                         hasChanges = true
                     }
                     resultArray.append(id)
                 } else {
                     hasChanges = true
-                    markAsCached(subscription.table, id)
                     resultArray.append(id)
-                    let dict = row.resultDictionary! as Dictionary
                     toCache.append(dict)
                 }
+
                 subscription.records = resultArray
                 subscription.count = resultArray.count
 
@@ -291,11 +302,41 @@ class DatabaseDriver {
                 hasChanges = subscription.count != count
                 subscription.count = count
 
+            } else {
+
+                if subscription.raw == nil {
+                    subscription.raw = [] as [Record]
+                }
+
+                let dict = row.resultDictionary! as Record
+                resultRaw.append(dict)
+
+                if hasChanges == false {
+                    let oldRecord = subscription.raw!.indices.contains(i) ? subscription.raw![i] : nil
+                    if  oldRecord == nil || isChangedRecord(oldRecord!, dict) {
+                        hasChanges = true
+                    }
+                }
+
+                subscription.count = resultRaw.count
+                subscription.raw = resultRaw
+
             }
+            i += 1
+        }
+
+        if subscription.count <= 0 || subscription.count != i {
+            hasChanges = true
         }
 
         if hasChanges == false {
             return nil
+        }
+
+        if i == 0 {
+            subscription.records = []
+            subscription.count = 0
+            subscription.raw = nil
         }
 
         return (toCache: toCache, subscriptionQuery: subscription);
@@ -303,9 +344,7 @@ class DatabaseDriver {
 
     private func sendQueriesResults(_ results: [(toCache: [Dictionary<AnyHashable, Any>], subscriptionQuery: SubscriptionQuery)]) {
         var cacheByTable: [Database.TableName: [Dictionary<AnyHashable, Any>]] = [:]
-        var cacheIdsByTable: [Database.TableName: [RecordId]] = [:]
-        var resultsByQuery: [Database.SQL: Dictionary<AnyHashable, Any>] = [:]
-        let eventParams: NSMutableDictionary = NSMutableDictionary()
+        var resultsByQuery: [Database.SQL: Dictionary<AnyHashable, Any?>] = [:]
 
         for result in results {
             let records = result.toCache
@@ -313,62 +352,103 @@ class DatabaseDriver {
             let table = subscription.table
             let query = subscription.sql
 
-            var cache = cacheByTable[table]
+            var cache = cacheByTable[table] as [Dictionary<AnyHashable, Any>]?
             if cache == nil {
                 cache = [] as [Dictionary<AnyHashable, Any>]
-                cacheByTable[table] = cache
-            }
-
-            var cacheIds = cacheIdsByTable[table]
-            if cacheIds == nil {
-                cacheIds = [] as [RecordId]
-                cacheIdsByTable[table] = cacheIds
             }
 
             for record in records {
                 let id = record["id"]! as! RecordId
-                if cacheIds!.contains(id) == false {
+                let cached = cache!.contains { cachedRecord in cachedRecord["id"] as! RecordId == id }
+                if cached == false {
                     cache!.append(record)
-                    cacheIds!.append(id)
                 }
             }
 
             cacheByTable[table] = cache
-            cacheIdsByTable[table] = cacheIds
-
             resultsByQuery[query] = [
                 "records": subscription.records,
-                "count": subscription.count
+                "count": subscription.count,
+                "raw": subscription.raw,
             ]
         }
 
-        eventParams["toCache"] = cacheByTable
-        eventParams["results"] = resultsByQuery
+        for (table, _) in cacheByTable {
+            for recordToCache in cacheByTable[table]! {
+                markAsCached(table, recordToCache["id"] as! RecordId, recordToCache)
+            }
+        }
+
+        let eventParams: [String: Any] = [
+            "toCache": cacheByTable,
+            "results": resultsByQuery
+        ]
 
         DatabaseBridge.shared.sendEvent(withName: "QueriesResults", body: eventParams);
     }
 
     func isCached(_ table: Database.TableName, _ id: RecordId) -> Bool {
-        if let set = cachedRecords[table] as? NSSet {
-            return set.contains(id)
+        if let set = cachedRecords[table] as? NSMutableDictionary {
+            if set[id] != nil {
+                return true
+            }
         }
         return false
     }
 
-    private func markAsCached(_ table: Database.TableName, _ id: RecordId) {
-        var cachedSet: NSMutableSet
-        if let set = cachedRecords[table] as? NSMutableSet {
+    private func markAsCached(_ table: Database.TableName, _ id: RecordId, _ record: Record) {
+        var cachedSet: NSMutableDictionary
+        if let set = cachedRecords[table] as? NSMutableDictionary {
             cachedSet = set
         } else {
-            cachedSet = NSMutableSet()
+            cachedSet = NSMutableDictionary()
             cachedRecords[table] = cachedSet
         }
-        cachedSet.add(id)
+        cachedSet[id] = record
+    }
+
+    private func isCachedRecord(_ table: Database.TableName, _ id: RecordId, _ record: Record) -> Bool {
+        if isCached(table, id) == false {
+            return false
+        }
+
+        let recordsById = cachedRecords[table] as? NSMutableDictionary
+        if (recordsById == nil) {
+            return false
+        }
+
+        let cachedRecord = recordsById![id] as? Record
+        if cachedRecord == nil || isChangedRecord(cachedRecord!, record) {
+            return false
+        }
+
+        return true
+    }
+
+    private func isChangedRecord(_ recordA: Record, _ recordB: Record) -> Bool {
+        if recordA.count != recordB.count {
+            return true
+        }
+
+        for (columnA, valueA) in recordA {
+            let valueB = recordB[columnA]
+            if isEqual(valueB!, valueA) == false {
+                return true
+            }
+        }
+
+        return false
+    }
+    
+    private func isEqual(_ a: Any, _ b: Any) -> Bool {
+        guard a is AnyHashable else { return false }
+        guard b is AnyHashable else { return false }
+        return (a as! AnyHashable) == (b as! AnyHashable)
     }
 
     private func removeFromCache(_ table: Database.TableName, _ id: RecordId) {
-        if let set = cachedRecords[table] as? NSMutableSet {
-            set.remove(id)
+        if let set = cachedRecords[table] as? NSMutableDictionary {
+            set.removeObject(forKey: id)
         }
     }
 
@@ -396,9 +476,19 @@ class DatabaseDriver {
 
     func unsafeResetDatabase(schema: Schema) throws {
         try database.unsafeDestroyEverything()
-        cachedRecords = [:]
+        unsafeResetCache()
 
         try setUpSchema(schema: schema)
+    }
+
+    func unsafeResetCache() {
+        consoleLog("Unsafe Reset Cache")
+        cachedRecords = [:]
+        for var subscriptionQuery in subscriptionQueries {
+            subscriptionQuery.records = []
+            subscriptionQuery.count = -1
+            subscriptionQuery.raw = nil
+        }
     }
 
     private func setUpSchema(schema: Schema) throws {

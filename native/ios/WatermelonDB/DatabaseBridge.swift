@@ -278,6 +278,15 @@ extension DatabaseBridge {
         }
     }
 
+    @objc(unsafeResetCache:resolve:reject:)
+    func unsafeResetCache(tag: ConnectionTag,
+                             resolve: @escaping RCTPromiseResolveBlock,
+                             reject: @escaping RCTPromiseRejectBlock) {
+        withDriver(tag, resolve, reject) {
+            try $0.unsafeResetCache()
+        }
+    }
+
     @objc(unsafeResetDatabase:schema:schemaVersion:resolve:reject:)
     func unsafeResetDatabase(tag: ConnectionTag,
                              schema: Database.SQL,
