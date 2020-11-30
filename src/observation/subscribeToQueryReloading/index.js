@@ -19,7 +19,7 @@ export default function subscribeToQueryReloading<Record: Model>(
   shouldEmitStatus: boolean = false,
 ): Unsubscribe {
   const { collection } = query
-  let previousRecords: Record[] = []
+  let previousRecords: Record[] = null
   let unsubscribed = false
 
   if (shouldEmitStatus) {
@@ -30,7 +30,7 @@ export default function subscribeToQueryReloading<Record: Model>(
     if (unsubscribed) {
       return
     }
-    if (identicalArrays(previousRecords, records)) {
+    if (previousRecords && identicalArrays(previousRecords, records)) {
       return
     }
 

@@ -58,8 +58,8 @@ export default function subscribeToSimpleQuery<Record: Model>(
   const matcher: Matcher<Record> = encodeMatcher(query.description)
   let unsubscribed = false
   let unsubscribe = null
-  let matchingRecords: Record[] = []
-  const emitCopy = () => !unsubscribed && subscriber(matchingRecords.slice(0))
+  let matchingRecords: Record[] = null
+  const emitCopy = () => !unsubscribed && subscriber((matchingRecords || []).slice(0))
 
   if (alwaysEmit) {
     !unsubscribed && subscriber(false)
@@ -70,7 +70,7 @@ export default function subscribeToSimpleQuery<Record: Model>(
       subscription.unsubscribe()
       return
     }
-    if (identicalArrays(matchingRecords, records)) {
+    if (matchingRecords && identicalArrays(matchingRecords, records)) {
       return
     }
 
@@ -83,7 +83,7 @@ export default function subscribeToSimpleQuery<Record: Model>(
   unsubscribe = query.collection.experimentalSubscribe(function observeQueryCollectionChanged(
     changeSet,
   ): void {
-    const shouldEmit = processChangeSet(changeSet, matcher, matchingRecords)
+    const shouldEmit = processChangeSet(changeSet, matcher, matchingRecords || [])
     if (shouldEmit || alwaysEmit) {
       emitCopy()
     }

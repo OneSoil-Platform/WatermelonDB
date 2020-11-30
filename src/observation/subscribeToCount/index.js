@@ -15,11 +15,17 @@ export default function subscribeToCount<Record: Model>(
   subscriber: number => void,
 ): Unsubscribe {
   let unsubscribed = false
+  let lastCount = -1;
 
   const subscription = query.observeCountEvent().subscribe(count => {
     if (unsubscribed) {
       return
     }
+    if (count === lastCount) {
+      return
+    }
+
+    lastCount = count;
     subscriber(count)
   })
 
