@@ -154,7 +154,10 @@ class DatabaseDriver(context: Context, dbName: String) {
                     var i = 0
                     while (it.moveToNext()) {
                         val id = it.getString(it.getColumnIndex("id"))
-                        val oldId: RecordId = subscription.records.get(i) ?: ""
+                        var oldId: RecordID = ""
+                        if ((subscription.records.count() > i)) {
+                            oldId = subscription.records.get(i) as RecordID
+                        }
                         if (isCachedRecord(subscription.table, id, cursorToMutableMap(it))) {
                             if (!hasChanges && id != oldId) {
                                 hasChanges = true
