@@ -185,6 +185,12 @@ export default class SQLiteAdapter implements DatabaseAdapter, SQLDatabaseAdapte
     logger.log(`[WatermelonDB][SQLite] Schema set up successfully`)
   }
 
+  parseQuery(serializedQueryOrSQL: SerializedQuery | string, countMode?: Boolean): string {
+    return typeof serializedQueryOrSQL === 'string'
+      ? serializedQueryOrSQL
+      : encodeQuery(serializedQueryOrSQL, countMode)
+  }
+
   DebounceInterval = 50
   subscribeQueryQueue = {}
   unsubscribeQueryQueue = {}

@@ -80,21 +80,28 @@ export default class Collection<Record: Model> {
             return observer.next(cachedRecords)
         }
       }
-      const { id, unsubscribe } = this.database.adapter.underlyingAdapter.subscribeQuery(
-        this.table,
+      const id = this.database.adapter.underlyingAdapter.parseQuery(
         serializedQueryOrSQL,
-        relatedTables,
         mode === 'count',
       )
+
       if (this._subscriptionQueries[id]) {
         this._subscriptionQueries[id].subscribers.push(subscriber)
         if (this._subscriptionQueries[id].results) {
           subscriber(this._subscriptionQueries[id].results)
         }
       } else {
+        const { id, unsubscribe } = this.database.adapter.underlyingAdapter.subscribeQuery(
+          this.table,
+          serializedQueryOrSQL,
+          relatedTables,
+          mode === 'count',
+        )
+
         this._subscriptionQueries[id] = {
           id,
           subscribers: [subscriber],
+          unsubscribe: unsubscribe,
         }
       }
       return () => {
@@ -102,7 +109,7 @@ export default class Collection<Record: Model> {
           id
         ].subscribers.filter(s => s !== subscriber)
         if (!this._subscriptionQueries[id].subscribers.length) {
-          unsubscribe && unsubscribe()
+          this._subscriptionQueries[id].unsubscribe && this._subscriptionQueries[id].unsubscribe()
         }
       }
     })
