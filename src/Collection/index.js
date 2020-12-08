@@ -110,6 +110,7 @@ export default class Collection<Record: Model> {
         ].subscribers.filter(s => s !== subscriber)
         if (!this._subscriptionQueries[id].subscribers.length) {
           this._subscriptionQueries[id].unsubscribe && this._subscriptionQueries[id].unsubscribe()
+          delete this._subscriptionQueries[id]
         }
       }
     })
