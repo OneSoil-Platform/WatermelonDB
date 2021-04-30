@@ -5,6 +5,7 @@
 #endif
 
 #import <React/RCTBridgeModule.h>
+#import <React/RCTEventEmitter.h>
 
 #if __has_include("JSIInstaller.h")
 #import "JSIInstaller.h"
