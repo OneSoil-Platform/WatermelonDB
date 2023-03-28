@@ -7,8 +7,8 @@
 #import <React/RCTBridgeModule.h>
 #import <React/RCTEventEmitter.h>
 
-#if __has_include("JSIInstaller.h")
-#import "JSIInstaller.h"
+#if __has_include("DatabaseDeleteHelper.h")
+#import "DatabaseDeleteHelper.h"
 #else
-#import "../JSIInstaller.h"
+#import "../DatabaseDeleteHelper.h"
 #endif

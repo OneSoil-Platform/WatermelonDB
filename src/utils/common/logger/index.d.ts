@@ -1,11 +1,15 @@
-declare module '@nozbe/watermelondb/utils/common/logger' {
-  export default class Logger {
-    log(...messages: any[]): void
+declare class Logger {
+  silent: boolean
 
-    warn(...messages: any[]): void
- 
-    error(...messages: any[]): void
+  log(...messages: any[]): void
 
-    silence(): void
-  }
+  warn(...messages: any[]): void
+
+  error(...messages: any[]): void
+
+  silence(): void
 }
+
+declare const logger: Logger
+
+export default logger

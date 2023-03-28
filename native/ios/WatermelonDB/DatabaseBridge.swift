@@ -1,23 +1,12 @@
 import Foundation
 
 @objc(DatabaseBridge)
-final public class DatabaseBridge: RCTEventEmitter {
+final public class DatabaseBridge: NSObject {
     typealias ConnectionTag = NSNumber
 
-    public static var shared: DatabaseBridge!
-
-    public override static func requiresMainQueueSetup() -> Bool {
-        return false
-    }
-    public override func constantsToExport() -> [AnyHashable: Any] {
-        return [:]
-    }
-    @objc
-    public override var methodQueue: DispatchQueue {
-        get {
-            return DispatchQueue(label: "com.nozbe.watermelondb.database", qos: .userInteractive)
-        }
-    }
+    @objc var bridge: RCTBridge?
+    @objc static let requiresMainQueueSetup: Bool = false
+    @objc let methodQueue = DispatchQueue(label: "com.nozbe.watermelondb.database", qos: .userInteractive)
 
     private enum Connection {
         case connected(driver: DatabaseDriver, synchronous: Bool)
@@ -31,15 +20,6 @@ final public class DatabaseBridge: RCTEventEmitter {
         }
     }
     private var connections: [Int: Connection] = [:]
-
-    override init() {
-        super.init()
-        DatabaseBridge.shared = self
-    }
-
-    public override func supportedEvents() -> [String]! {
-        return ["QueriesResults"]
-    }
 }
 
 // MARK: - Asynchronous connections
@@ -170,44 +150,6 @@ extension DatabaseBridge {
 // MARK: - Asynchronous actions
 
 extension DatabaseBridge {
-    @objc(subscribe:table:query:relatedTables:resolve:reject:)
-    func subscribe(tag: ConnectionTag,
-                   table: Database.TableName,
-                   query: Database.SQL,
-                   relatedTables: [Database.TableName],
-                   resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-        withDriver(tag, resolve, reject) {
-            try $0.subscribe(table: table, relatedTables: relatedTables, query: query) as Any
-        }
-    }
-
-    @objc(unsubscribe:query:resolve:reject:)
-    func unsubscribe(tag: ConnectionTag,
-                   query: Database.SQL,
-                   resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-        withDriver(tag, resolve, reject) {
-            try $0.unsubscribe(query) as Any
-        }
-    }
-
-    @objc(subscribeBatch:subscriptions:resolve:reject:)
-    func subscribeBatch(tag: ConnectionTag,
-                   subscriptions: [[Any]],
-                   resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-        withDriver(tag, resolve, reject) {
-            try $0.subscribeBatch(self.toSubscriptionsList(subscriptions)) as Any
-        }
-    }
-
-    @objc(unsubscribeBatch:queries:resolve:reject:)
-    func unsubscribeBatch(tag: ConnectionTag,
-                   queries: [Database.SQL],
-                   resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-        withDriver(tag, resolve, reject) {
-            try $0.unsubscribeBatch(queries) as Any
-        }
-    }
-
     @objc(find:table:id:resolve:reject:)
     func find(tag: ConnectionTag,
               table: Database.TableName,
@@ -275,15 +217,6 @@ extension DatabaseBridge {
                                reject: @escaping RCTPromiseRejectBlock) {
         withDriver(tag, resolve, reject) {
             try $0.destroyDeletedRecords(table: table, records: records)
-        }
-    }
-
-    @objc(unsafeResetCache:resolve:reject:)
-    func unsafeResetCache(tag: ConnectionTag,
-                             resolve: @escaping RCTPromiseResolveBlock,
-                             reject: @escaping RCTPromiseRejectBlock) {
-        withDriver(tag, resolve, reject) {
-            try $0.unsafeResetCache()
         }
     }
 
@@ -414,18 +347,6 @@ extension DatabaseBridge {
 // MARK: - Helpers
 
 extension DatabaseBridge {
-    private func toSubscriptionsList(_ subscriptions: [[Any]]) throws -> [(table: Database.TableName, relatedTables: [Database.TableName], query: Database.SQL)] {
-        return try subscriptions.map { subscription in
-            guard let table = subscription[safe: 0] as? Database.TableName,
-            let query = subscription[safe: 1] as? Database.SQL,
-            let relatedTables = subscription[safe: 2] as? [Database.TableName]
-            else {
-                throw "Bad subscribeBatch arguments".asError()
-            }
-            return (table: table, relatedTables: relatedTables, query: query)
-        }
-    }
-
     private func toBatchOperations(_ serializedOperations: NSString) throws -> [DatabaseDriver.Operation] {
         guard let data = serializedOperations.data(using: String.Encoding.utf8.rawValue),
         let operations = (try? JSONSerialization.jsonObject(with: data)) as? [[Any]]

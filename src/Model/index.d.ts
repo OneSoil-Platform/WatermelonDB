@@ -1,64 +1,144 @@
-declare module '@nozbe/watermelondb/Model' {
-  import { Collection, CollectionMap, ColumnName, Database, RawRecord, TableName } from '@nozbe/watermelondb';
-  import { Observable } from 'rxjs'
+import type { Observable, BehaviorSubject } from '../utils/rx'
+import { Unsubscribe } from '../utils/subscriptions'
+import type { $RE, $ReadOnlyArray } from '../types'
 
-  export type RecordId = string
+import type Database from '../Database'
+import type Collection from '../Collection'
+import type CollectionMap from '../Database/CollectionMap'
+import type { TableName, ColumnName } from '../Schema'
+import type { Value } from '../QueryDescription'
+import type { RawRecord, DirtyRaw } from '../RawRecord'
 
-  export type SyncStatus = 'synced' | 'created' | 'updated' | 'deleted'
+export type RecordId = string
 
-  export interface BelongsToAssociation {
-    type: 'belongs_to'
-    key: ColumnName
-  }
-  export interface HasManyAssociation {
-    type: 'has_many'
-    foreignKey: ColumnName
-  }
-  export type AssociationInfo = BelongsToAssociation | HasManyAssociation
-  export interface Associations {
-    [tableName: string]: AssociationInfo
-  }
+// NOTE: status 'disposable' MUST NOT ever appear in a persisted record
+export type SyncStatus = 'synced' | 'created' | 'updated' | 'deleted' | 'disposable'
 
-  export function associations(
-    ...associationList: Array<[TableName<any>, AssociationInfo]>
-  ): Associations
+export type BelongsToAssociation = $RE<{ type: 'belongs_to'; key: ColumnName }>
+export type HasManyAssociation = $RE<{ type: 'has_many'; foreignKey: ColumnName }>
+export type AssociationInfo = BelongsToAssociation | HasManyAssociation
+export type Associations = { [tableName: TableName<any>]: AssociationInfo }
 
-  export default class Model {
-    // FIXME: How to correctly point to a static this?
-    public static table: TableName<Model>
+export function associations(...associationList: [TableName<any>, AssociationInfo][]): Associations
 
-    public static associations: Associations
+export default class Model {
+  // Set this in concrete Models to the name of the database table
+  static table: TableName<Model>
 
-    public _raw: RawRecord
+  // Set this in concrete Models to define relationships between different records
+  static associations: Associations
 
-    public id: RecordId
+  // Used by withObservables to differentiate between object types
+  static _wmelonTag: string
 
-    public syncStatus: SyncStatus
+  _raw: RawRecord
 
-    public update(recordUpdater?: (record: this) => void): Promise<void>
+  _isEditing: boolean
 
-    public prepareUpdate(recordUpdater?: (record: this) => void): this
+  _preparedState: null | 'create' | 'update' | 'markAsDeleted' | 'destroyPermanently'
 
-    public markAsDeleted(): Promise<void>
+  __changes?: BehaviorSubject<any>
 
-    public destroyPermanently(): Promise<void>
+  _getChanges(): BehaviorSubject<any>
 
-    public prepareMarkAsDeleted(): this
+  get id(): RecordId
 
-    public prepareDestroyPermanently(): this
+  get syncStatus(): SyncStatus
 
-    public observe(): Observable<this>
+  // Modifies the model (using passed function) and saves it to the database.
+  // Touches `updatedAt` if available.
+  //
+  // Example:
+  // someTask.update(task => {
+  //   task.name = 'New name'
+  // })
+  update(recordUpdater?: (_: this) => void): Promise<this>
 
-    public batch(...records: Readonly<Model[]>): Promise<void>
+  // Prepares an update to the database (using passed function).
+  // Touches `updatedAt` if available.
+  //
+  // After preparing an update, you must execute it synchronously using
+  // database.batch()
+  prepareUpdate(recordUpdater?: (_: this) => void): this
 
-    public subAction<T>(action: () => Promise<T>): Promise<T>
+  prepareMarkAsDeleted(): this
 
-    public collection: Collection<Model>
+  prepareDestroyPermanently(): this
 
-    public collections: CollectionMap
+  // Marks this record as deleted (will be permanently deleted after sync)
+  // Note: Use this only with Sync
+  markAsDeleted(): Promise<void>
 
-    public database: Database
+  // Pernamently removes this record from the database
+  // Note: Don't use this when using Sync
+  destroyPermanently(): Promise<void>
 
-    public asModel: this
-  }
+  experimentalMarkAsDeleted(): Promise<void>
+
+  experimentalDestroyPermanently(): Promise<void>
+
+  // *** Observing changes ***
+
+  // Returns an observable that emits `this` upon subscription and every time this record changes
+  // Emits `complete` if this record is destroyed
+  observe(): Observable<this>
+
+  // *** Implementation details ***
+
+  collection: Collection<Model>
+
+  // Collections of other Models in the same domain as this record
+  get collections(): CollectionMap
+
+  get database(): Database
+
+  get db(): Database
+
+  get asModel(): this
+
+  // See: Database.batch()
+  // To be used by Model @writer methods only!
+  // TODO: protect batch,callWriter,... from being used outside a @reader/@writer
+  batch(...records: $ReadOnlyArray<Model | null | void | false>): Promise<void>
+
+  // To be used by Model @writer methods only!
+  callWriter<T>(action: () => Promise<T>): Promise<T>
+
+  // To be used by Model @writer/@reader methods only!
+  callReader<T>(action: () => Promise<T>): Promise<T>
+
+  // To be used by Model @writer/@reader methods only!
+  subAction<T>(action: () => Promise<T>): Promise<T>
+
+  get table(): TableName<this>
+
+  // FIX_TS
+  // Don't use this directly! Use `collection.create()`
+  constructor(collection: Collection<Model>, raw: RawRecord)
+
+  static _prepareCreate(collection: Collection<Model>, recordBuilder: (_: Model) => void): Model
+
+  static _prepareCreateFromDirtyRaw(collection: Collection<Model>, dirtyRaw: DirtyRaw): Model
+
+  static _disposableFromDirtyRaw(collection: Collection<Model>, dirtyRaw: DirtyRaw): Model
+
+  _subscribers: [(isDeleted: boolean) => void, any][]
+
+  experimentalSubscribe(subscriber: (isDeleted: boolean) => void, debugInfo?: any): Unsubscribe
+
+  _notifyChanged(): void
+
+  _notifyDestroyed(): void
+
+  _getRaw(rawFieldName: ColumnName): Value
+
+  _setRaw(rawFieldName: ColumnName, rawValue: Value): void
+
+  // Please don't use this unless you really understand how Watermelon Sync works, and thought long and
+  // hard about risks of inconsistency after sync
+  _dangerouslySetRawWithoutMarkingColumnChange(rawFieldName: ColumnName, rawValue: Value): void
+
+  __ensureCanSetRaw(): void
+
+  __ensureNotDisposable(debugName: string): void
 }

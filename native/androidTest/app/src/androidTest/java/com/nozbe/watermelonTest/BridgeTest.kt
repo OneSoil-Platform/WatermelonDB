@@ -1,20 +1,16 @@
 package com.nozbe.watermelonTest
 
-import org.junit.Test
-import androidx.test.rule.ActivityTestRule
 import android.util.Log
+import androidx.test.core.app.launchActivity
 import org.junit.Assert
-import org.junit.Rule
+import org.junit.Test
 
 class BridgeTest {
-
-    @get:Rule
-    val activityRule: ActivityTestRule<MainActivity> = ActivityTestRule(MainActivity::class.java)
-
     @Test
     fun testBridge() {
+        launchActivity<MainActivity>()
         synchronized(BridgeTestReporter.testFinishedNotification) {
-            BridgeTestReporter.testFinishedNotification.wait(500000)
+            BridgeTestReporter.testFinishedNotification.wait(5 * 60 * 1000)
         }
         try {
             when (val result = BridgeTestReporter.result) {

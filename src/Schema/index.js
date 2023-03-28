@@ -1,15 +1,29 @@
 // @flow
 
+// NOTE: Only require files needed (critical path on web)
 import invariant from '../utils/common/invariant'
-import checkName from '../utils/fp/checkName'
 import type { $RE } from '../types'
 
 import type Model from '../Model'
 
+/**
+ * String that signifies a database table name (mapping to WatermelonDB Models)
+ */
 export opaque type TableName<+T: Model>: string = string
+
+/**
+ * String that signifies a database column name (mapping to WatermelonDB fields)
+ */
 export opaque type ColumnName: string = string
 
+/**
+ * Type of a column
+ */
 export type ColumnType = 'string' | 'number' | 'boolean'
+
+/**
+ * Definition of a table column
+ */
 export type ColumnSchema = $RE<{
   name: ColumnName,
   type: ColumnType,
@@ -22,7 +36,7 @@ export type ColumnMap = { [name: ColumnName]: ColumnSchema }
 export type TableSchemaSpec = $Exact<{
   name: TableName<any>,
   columns: ColumnSchema[],
-  unsafeSql?: string => string,
+  unsafeSql?: (string) => string,
 }>
 
 export type TableSchema = $RE<{
@@ -30,38 +44,49 @@ export type TableSchema = $RE<{
   // depending on operation, it's faster to use map or array
   columns: ColumnMap,
   columnArray: ColumnSchema[],
-  unsafeSql?: string => string,
+  unsafeSql?: (string) => string,
 }>
 
 type TableMap = { [name: TableName<any>]: TableSchema }
 
 export type SchemaVersion = number
 
+export type AppSchemaUnsafeSqlKind = 'setup' | 'create_indices' | 'drop_indices'
+
 export type AppSchemaSpec = $Exact<{
   version: number,
   tables: TableSchema[],
-  unsafeSql?: string => string,
+  unsafeSql?: (string, AppSchemaUnsafeSqlKind) => string,
 }>
 
 export type AppSchema = $RE<{
   version: SchemaVersion,
   tables: TableMap,
-  unsafeSql?: string => string,
+  unsafeSql?: (string, AppSchemaUnsafeSqlKind) => string,
 }>
 
+/**
+ * Creates a typed TableName
+ */
 export function tableName<T: Model>(name: string): TableName<T> {
   return name
 }
 
+/**
+ * Creates a typed ColumnName
+ */
 export function columnName(name: string): ColumnName {
   return name
 }
 
+/**
+ * Creates a database schema object. Pass table definitions created using {@see tableSchema}
+ */
 export function appSchema({ version, tables: tableList, unsafeSql }: AppSchemaSpec): AppSchema {
   if (process.env.NODE_ENV !== 'production') {
     invariant(version > 0, `Schema version must be greater than 0`)
   }
-  const tables: TableMap = tableList.reduce((map, table) => {
+  const tables: TableMap = tableList.reduce<{ [TableName<any>]: TableSchema }>((map, table) => {
     if (process.env.NODE_ENV !== 'production') {
       invariant(typeof table === 'object' && table.name, `Table schema must contain a name`)
     }
@@ -79,6 +104,7 @@ const validateName = (name: string) => {
       !['id', '_changed', '_status', 'local_storage'].includes(name.toLowerCase()),
       `Invalid column or table name '${name}' - reserved by WatermelonDB`,
     )
+    const checkName = require('../utils/fp/checkName').default
     checkName(name)
   }
 }
@@ -106,6 +132,9 @@ export function validateColumnSchema(column: ColumnSchema): void {
   }
 }
 
+/**
+ * Creates a typed TableSchema
+ */
 export function tableSchema({
   name,
   columns: columnArray,
@@ -116,7 +145,7 @@ export function tableSchema({
     validateName(name)
   }
 
-  const columns: ColumnMap = columnArray.reduce((map, column) => {
+  const columns: ColumnMap = columnArray.reduce<{ [ColumnName]: ColumnSchema }>((map, column) => {
     if (process.env.NODE_ENV !== 'production') {
       validateColumnSchema(column)
     }

@@ -1,0 +1,1 @@
+../../../../../ios/WatermelonDB/objc/WMDatabaseBridge.h

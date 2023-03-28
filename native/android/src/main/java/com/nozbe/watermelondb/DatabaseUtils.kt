@@ -10,6 +10,7 @@ typealias RecordID = String
 typealias TableName = String
 typealias ColumnName = String
 typealias QueryArgs = Array<Any>
+typealias QueryArgs = Array<Any?>
 typealias RawQueryArgs = Array<String>
 typealias ConnectionTag = Int
 typealias SchemaVersion = Int

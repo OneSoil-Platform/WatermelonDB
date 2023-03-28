@@ -1,9 +1,4 @@
 #import "JSLockPerfHack.h"
-#import <UIKit/UIKit.h>
-#import <JavaScriptCore/JavaScriptCore.h>
-#import <jsi/JSCRuntime.h>
-#import <objc/runtime.h>
-#import <objc/message.h>
 
 using namespace facebook;
 
@@ -30,13 +25,39 @@ using namespace facebook;
 // disable itself with every major iOS release to avoid breakage - must be manually reenabled, and has fallbacks for every
 // broken assumption I could think of.
 //
+// 2021 update:
+// - explicit JSLock() / JSUnlock() APIs have been added, but are private
+//   https://github.com/WebKit/WebKit/commit/7993925814478740bb1ac9798d6ef947e9103e0c#diff-3486ee6539c9411128b1c4c0a4f6cc960516f258f9820592ac16bacc9eba2297
+// - JSLockHolder renamed to Locker
+// - Removed unnecessary locking from a few APIs
+//   https://github.com/WebKit/WebKit/commit/03a825dad22db819967f3b19e00d3ac23ec31d2b#diff-a001581271f7e2b5dbace303c1a9a1d39b0a183c43dd63a7951cb4f57b42163d
+//
 // To enable this hack, pass -DENABLE_JSLOCK_PERFORMANCE_HACK compiler flag
+//
+// 2023 update:
+// - it seems that JSLock/JSUnlock are still private
+// - this perf hack is basically unmaintained, because we moved to Hermes. But it almost surely still works,
+//   so please contribute if you still need it on iOS 16 / RN 0.71+
 
 #ifdef ENABLE_JSLOCK_PERFORMANCE_HACK
+
+#import <JavaScriptCore/JavaScriptCore.h>
+#import <jsi/JSCRuntime.h>
+#import <objc/runtime.h>
+#import <objc/message.h>
 
 namespace watermelondb {
 std::function<void (void)> *blockToExecute = nullptr;
 bool didBlockExecuteUsingHack = false;
+
+void perfhackFail(NSString *whytho) {
+    static bool didWarn = false;
+    if (!didWarn) {
+        NSLog(@"WatermelonDB JSLock perfhack failed - %@. Falling back...", whytho);
+        didWarn = true;
+    }
+}
+
 }
 
 @implementation NSObject (JSValueHacks)
@@ -65,10 +86,10 @@ void watermelonCallWithJSCLockHolder(jsi::Runtime& rt, std::function<void (void)
     using namespace watermelondb;
     float systemVersion = [[[UIDevice currentDevice] systemVersion] floatValue];
 
-    if (systemVersion < 13 || systemVersion >= 14) {
+    if (systemVersion < 13 || systemVersion >= 16) {
         // Those iOS versions have not been tested, so using fallback
         // Please contribute :)
-        NSLog(@"WatermelonDB JSLock perfhack failed - unknown iOS version. Falling back...");
+        perfhackFail(@"unknown iOS version");
         block();
         return;
     }
@@ -76,7 +97,7 @@ void watermelonCallWithJSCLockHolder(jsi::Runtime& rt, std::function<void (void)
     JSGlobalContextRef globalContext = (JSGlobalContextRef) rt.getContext();
 
     if (!globalContext) {
-        NSLog(@"WatermelonDB JSLock perfhack failed - broken JSI integration. Falling back...");
+        perfhackFail(@"broken JSI integration");
         block();
         return;
     }
@@ -94,7 +115,7 @@ void watermelonCallWithJSCLockHolder(jsi::Runtime& rt, std::function<void (void)
         Method newMethod = class_getClassMethod([NSObject class], @selector(watermelonSwizzledValueWithJSValueRef:inContext:));
 
         if (!origMethod || !newMethod) {
-            NSLog(@"WatermelonDB JSLock perfhack failed - missing methods to swizzle. Falling back...");
+            perfhackFail(@"missing methods to swizzle");
             return;
         }
 
@@ -115,7 +136,7 @@ void watermelonCallWithJSCLockHolder(jsi::Runtime& rt, std::function<void (void)
     [dummyValue value];
 
     if (!didBlockExecuteUsingHack) {
-        NSLog(@"WatermelonDB JSLock perfhack failed - swizzled method did not call our block. Falling back...");
+        perfhackFail(@"swizzled method did not call our block");
         blockToExecute = nullptr;
         block();
     }

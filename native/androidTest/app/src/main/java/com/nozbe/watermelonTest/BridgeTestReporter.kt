@@ -7,7 +7,7 @@ import com.facebook.react.bridge.ReadableMap
 import java.util.logging.Logger
 
 class BridgeTestReporter(reactContext: ReactApplicationContext) :
-        ReactContextBaseJavaModule(reactContext) {
+    ReactContextBaseJavaModule(reactContext) {
 
     sealed class Result {
         class Success(val result: List<String>) : Result()
@@ -30,19 +30,23 @@ class BridgeTestReporter(reactContext: ReactApplicationContext) :
             val messages = tempResult.map {
                 if (!(it["passed"] as Boolean)) {
                     it["message"] as String? ?: ""
-                } else ""
+                } else {
+                    ""
+                }
             }
             Result.Failure(messages)
         } else {
             val messages = tempResult.map {
                 if (it["passed"] as Boolean) {
                     it["message"] as String? ?: ""
-                } else ""
+                } else {
+                    ""
+                }
             }
             Result.Success(messages)
         }
         synchronized(testFinishedNotification) {
-            BridgeTestReporter.testFinishedNotification.notify()
+            testFinishedNotification.notify()
         }
     }
 }

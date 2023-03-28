@@ -1,12 +1,12 @@
 // @flow
 
-import { all, values, pipe } from 'rambdax'
-
-import { logError, invariant } from '../../utils/common'
+import { values } from '../../utils/fp'
+import areRecordsEqual from '../../utils/fp/areRecordsEqual'
+import { invariant } from '../../utils/common'
 
 import type { Model, Collection, Database } from '../..'
 import { type RawRecord, type DirtyRaw, sanitizedRaw } from '../../RawRecord'
-import type { SyncLog, SyncDatabaseChangeSet } from '../index'
+import type { SyncLog, SyncDatabaseChangeSet, SyncConflictResolver } from '../index'
 
 // Returns raw record with naive solution to a conflict based on local `_changed` field
 // This is a per-column resolution algorithm. All columns that were changed locally win
@@ -30,17 +30,9 @@ export function resolveConflict(local: RawRecord, remote: DirtyRaw): DirtyRaw {
   }
 
   // Use local properties where changed
-  local._changed.split(',').forEach(column => {
+  local._changed.split(',').forEach((column) => {
     resolved[column] = local[column]
   })
-
-  // Handle edge case
-  if (local._status === 'created') {
-    logError(
-      `[Sync] Server wants client to update record ${local.id}, but it's marked as locally created. This is most likely either a server error or a Watermelon bug (please file an issue if it is!). Will assume it should have been 'synced', and just replace the raw`,
-    )
-    resolved._status = 'synced'
-  }
 
   return resolved
 }
@@ -53,6 +45,7 @@ export function prepareCreateFromRaw<T: Model>(collection: Collection<T>, dirtyR
   // TODO: Think more deeply about this - it's probably unnecessary to do this check, since it would
   // mean malicious sync server, which is a bigger problem
   invariant(
+    // $FlowFixMe
     !Object.prototype.hasOwnProperty.call(dirtyRaw, '__proto__'),
     'Malicious dirtyRaw detected - contains a __proto__ key',
   )
@@ -60,19 +53,59 @@ export function prepareCreateFromRaw<T: Model>(collection: Collection<T>, dirtyR
   return collection.prepareCreateFromDirtyRaw(raw)
 }
 
-export function prepareUpdateFromRaw<T: Model>(
-  record: T,
-  updatedDirtyRaw: DirtyRaw,
-  log: ?SyncLog,
-): T {
-  // Note COPY for log - only if needed
-  const logConflict = log && !!record._raw._changed
-  const logLocal = logConflict ? { ...record._raw } : {}
-  const logRemote = logConflict ? { ...updatedDirtyRaw } : {}
+// optimization - don't run DB update if received record is the same as local
+// (this happens a lot during replacement sync)
+export function requiresUpdate<T: Model>(
+  collection: Collection<T>,
+  local: RawRecord,
+  dirtyRemote: DirtyRaw,
+): boolean {
+  if (local._status !== 'synced') {
+    return true
+  }
 
-  const newRaw = resolveConflict(record._raw, updatedDirtyRaw)
-  return record.prepareUpdate(() => {
-    replaceRaw(record, newRaw)
+  const remote = sanitizedRaw(dirtyRemote, collection.schema)
+  remote._status = 'synced'
+
+  const canSkipSafely = areRecordsEqual(local, remote)
+  return !canSkipSafely
+}
+
+export const recordFromRaw = <T: Model>(raw: RawRecord, collection: Collection<T>): T =>
+  collection._cache._modelForRaw(raw, false)
+
+export function prepareUpdateFromRaw<T: Model>(
+  localRaw: RawRecord,
+  remoteDirtyRaw: DirtyRaw,
+  collection: Collection<T>,
+  log: ?SyncLog,
+  conflictResolver?: SyncConflictResolver,
+): ?T {
+  if (!requiresUpdate(collection, localRaw, remoteDirtyRaw)) {
+    return null
+  }
+
+  const local = recordFromRaw(localRaw, collection)
+
+  // Note COPY for log - only if needed
+  const logConflict = log && !!localRaw._changed
+  const logLocal = logConflict
+    ? {
+        // $FlowFixMe
+        ...localRaw,
+      }
+    : {}
+  const logRemote = logConflict ? { ...remoteDirtyRaw } : {}
+
+  let newRaw = resolveConflict(localRaw, remoteDirtyRaw)
+
+  if (conflictResolver) {
+    newRaw = conflictResolver(collection.table, localRaw, remoteDirtyRaw, newRaw)
+  }
+
+  // $FlowFixMe
+  return local.prepareUpdate(() => {
+    replaceRaw(local, newRaw)
 
     // log resolved conflict - if any
     if (logConflict && log) {
@@ -80,24 +113,20 @@ export function prepareUpdateFromRaw<T: Model>(
       log.resolvedConflicts.push({
         local: logLocal,
         remote: logRemote,
-        resolved: { ...record._raw },
+        // $FlowFixMe
+        resolved: { ...newRaw },
       })
     }
   })
 }
 
 export function prepareMarkAsSynced<T: Model>(record: T): T {
+  // $FlowFixMe
   const newRaw = Object.assign({}, record._raw, { _status: 'synced', _changed: '' }) // faster than object spread
+  // $FlowFixMe
   return record.prepareUpdate(() => {
     replaceRaw(record, newRaw)
   })
-}
-
-export function ensureActionsEnabled(database: Database): void {
-  invariant(
-    database._actionsEnabled,
-    '[Sync] To use Sync, Actions must be enabled. Pass `{ actionsEnabled: true }` to Database constructor — see docs for more details',
-  )
 }
 
 export function ensureSameDatabase(database: Database, initialResetCount: number): void {
@@ -107,7 +136,15 @@ export function ensureSameDatabase(database: Database, initialResetCount: number
   )
 }
 
-export const isChangeSetEmpty: SyncDatabaseChangeSet => boolean = pipe(
-  values,
-  all(({ created, updated, deleted }) => created.length + updated.length + deleted.length === 0),
-)
+export const isChangeSetEmpty: (SyncDatabaseChangeSet) => boolean = (changeset) =>
+  values(changeset).every(
+    ({ created, updated, deleted }) => created.length + updated.length + deleted.length === 0,
+  )
+
+const sum: (number[]) => number = (xs) => xs.reduce((a, b) => a + b, 0)
+export const changeSetCount: (SyncDatabaseChangeSet) => number = (changeset) =>
+  sum(
+    values(changeset).map(
+      ({ created, updated, deleted }) => created.length + updated.length + deleted.length,
+    ),
+  )

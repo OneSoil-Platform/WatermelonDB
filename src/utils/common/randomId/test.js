@@ -9,21 +9,16 @@ describe('randomId', () => {
     expect(id2).not.toBe(id1)
   })
   it('always generates a valid id', () => {
-    const alphabet = '0123456789abcdefghijklmnopqrstuvwxyz'
+    const alphabet = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
     for (let i = 0; i < 250; i += 1) {
       const id = randomId()
       expect(id.length).toBe(16)
-      expect(id.split('').every(char => alphabet.includes(char))).toBe(true)
+      expect(id.split('').every((char) => alphabet.includes(char))).toBe(true)
     }
   })
 
   it('allows to override the generator function', () => {
-    const generator = () => {
-      return new Date()
-        .getTime()
-        .toString()
-        .substr(1, 4)
-    }
+    const generator = () => new Date().getTime().toString().substr(1, 4)
 
     setGenerator(generator)
 

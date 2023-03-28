@@ -1,6 +1,6 @@
 // @flow
 
-import makeDecorator from '../../utils/common/makeDecorator'
+import makeDecorator, { type Decorator } from '../../utils/common/makeDecorator'
 import { onLowMemory } from '../../utils/common/memory'
 import { type ColumnName } from '../../Schema'
 
@@ -19,7 +19,7 @@ import { ensureDecoratorUsedProperly } from '../common'
 const cache = new Map<number, Date>()
 onLowMemory(() => cache.clear())
 
-const dateDecorator = makeDecorator(
+const dateDecorator: Decorator = makeDecorator(
   (columnName: ColumnName) => (target: Object, key: string, descriptor: Object) => {
     ensureDecoratorUsedProperly(columnName, target, key, descriptor)
 
@@ -27,6 +27,7 @@ const dateDecorator = makeDecorator(
       configurable: true,
       enumerable: true,
       get(): ?Date {
+        // $FlowFixMe
         const rawValue = this.asModel._getRaw(columnName)
         if (typeof rawValue === 'number') {
           const cached = cache.get(rawValue)
@@ -44,6 +45,7 @@ const dateDecorator = makeDecorator(
         if (rawValue && date) {
           cache.set(rawValue, new Date(date))
         }
+        // $FlowFixMe
         this.asModel._setRaw(columnName, rawValue)
       },
     }

@@ -1,4 +1,3 @@
-import expect from 'expect'
 import { Platform } from 'react-native'
 import SQLiteAdapter from './index'
 import { testSchema } from '../__tests__/helpers'
@@ -6,67 +5,55 @@ import commonTests from '../__tests__/commonTests'
 import { invariant } from '../../utils/common'
 import DatabaseAdapterCompat from '../compat'
 
-const SQLiteAdapterTest = spec => {
-  spec.describe('SQLiteAdapter (async mode)', () => {
-    spec.it('configures adapter correctly', () => {
-      const adapter = new SQLiteAdapter({ schema: testSchema })
-      expect(adapter._dispatcherType).toBe('asynchronous')
-    })
-    commonTests().forEach(testCase => {
-      const [name, test] = testCase
-      spec.it(name, async () => {
-        const adapter = new SQLiteAdapter({ schema: testSchema, synchronous: false })
-        invariant(adapter._dispatcherType === 'asynchronous', 'this should be asynchronous')
-        await test(new DatabaseAdapterCompat(adapter), SQLiteAdapter, {}, Platform.OS)
-      })
-    })
-  })
-  spec.describe('SQLiteAdapter (synchronous mode)', () => {
-    commonTests().forEach(testCase => {
-      const [name, test] = testCase
-      spec.it(name, async () => {
-        const adapter = new SQLiteAdapter({ schema: testSchema, synchronous: true })
+const SQLiteAdapterTest = (spec) => {
+  const configurations = [
+    {
+      name: 'SQLiteAdapter (async mode)',
+      options: { disableNewBridge: true },
+      expectedDispatcherType: 'asynchronous',
+    },
+    {
+      name: 'SQLiteAdapter (async mode, new bridge)',
+      options: {},
+      expectedDispatcherType: 'asynchronous-v2',
+    },
+    { name: 'SQLiteAdapter (JSI mode)', options: { jsi: true }, expectedDispatcherType: 'jsi' },
+  ]
 
-        if (Platform.OS === 'ios') {
-          invariant(adapter._dispatcherType === 'synchronous', 'this should be synchronous')
-        } else {
+  configurations.forEach(({ name: configurationName, options, expectedDispatcherType }) => {
+    spec.describe(configurationName, () => {
+      spec.it('configures adapter correctly', () => {
+        const adapter = new SQLiteAdapter({ schema: testSchema, ...options })
+        expect(adapter._dispatcherType).toBe(expectedDispatcherType)
+      })
+
+      const testCases = commonTests()
+      const onlyTestCases = testCases.filter(([, , isOnly]) => isOnly)
+      const testCasesToRun = onlyTestCases.length ? onlyTestCases : testCases
+
+      testCasesToRun.forEach((testCase) => {
+        const [name, test] = testCase
+        spec.it(name, async () => {
+          const dbName = `file:testdb${Math.random()}?mode=memory&cache=shared`
+          const adapter = new SQLiteAdapter({ schema: testSchema, dbName, ...options })
           invariant(
-            adapter._dispatcherType === 'asynchronous',
-            'this should be asynchronous - android does not support synchronous adapter',
+            adapter._dispatcherType === expectedDispatcherType,
+            `Expected adapter to be ${expectedDispatcherType}`,
           )
-          return // no need to test - we've already run this exact same test
-        }
-
-        // TODO: Remove me. Temporary workaround for the race condition - wait until next macrotask to ensure that database has set up
-        await new Promise(resolve => setTimeout(resolve, 0))
-        await test(
-          new DatabaseAdapterCompat(adapter),
-          SQLiteAdapter,
-          { synchronous: true },
-          Platform.OS,
-        )
+          await test(
+            new DatabaseAdapterCompat(adapter),
+            SQLiteAdapter,
+            { dbName, ...options },
+            Platform.OS,
+          )
+        })
       })
-    })
-  })
-  spec.describe('SQLiteAdapter (JSI mode)', () => {
-    commonTests().forEach(testCase => {
-      const [name, test] = testCase
-      spec.it(name, async () => {
-        const adapter = new SQLiteAdapter({ schema: testSchema, experimentalUseJSI: true })
 
-        invariant(adapter._dispatcherType === 'jsi', 'native platforms should support jsi')
-
-        // TODO: Remove me. Temporary workaround for the race condition - wait until next macrotask to ensure that database has set up
-        await new Promise(resolve => setTimeout(resolve, 0))
-        await test(
-          new DatabaseAdapterCompat(adapter),
-          SQLiteAdapter,
-          {
-            experimentalUseJSI: true,
-          },
-          Platform.OS,
-        )
-      })
+      if (onlyTestCases.length) {
+        spec.it('BROKEN SETUP', async () => {
+          throw new Error('Do not commit tests with it.only')
+        })
+      }
     })
   })
 }

@@ -67,6 +67,7 @@ function isValidStatus(value: any): boolean {
 }
 
 // Transforms a dirty raw record object into a trusted sanitized RawRecord according to passed TableSchema
+// TODO: Should we make this public API for advanced users?
 export function sanitizedRaw(dirtyRaw: DirtyRaw, tableSchema: TableSchema): RawRecord {
   const { id, _status, _changed } = dirtyRaw
 
@@ -76,9 +77,11 @@ export function sanitizedRaw(dirtyRaw: DirtyRaw, tableSchema: TableSchema): RawR
 
   // TODO: Think about whether prototypeless objects are a useful mitigation
   // const raw = Object.create(null) // create a prototypeless object
-  const raw = {}
+  const raw: $Shape<RawRecord> = {}
 
   if (typeof id === 'string') {
+    // TODO: Can we trust IDs passed? Maybe we want to split this implementation, depending on whether
+    // this is used on implicitly-trusted (persisted or Watermelon-created) records, or if this is user input?
     raw.id = id
     raw._status = isValidStatus(_status) ? _status : 'created'
     raw._changed = typeof _changed === 'string' ? _changed : ''
@@ -94,6 +97,7 @@ export function sanitizedRaw(dirtyRaw: DirtyRaw, tableSchema: TableSchema): RawR
     const columnSchema = columns[i]
     const key = (columnSchema.name: string)
     // TODO: Check performance
+    // $FlowFixMe
     const value = Object.prototype.hasOwnProperty.call(dirtyRaw, key) ? dirtyRaw[key] : null
     _setRaw(raw, key, value, columnSchema)
   }

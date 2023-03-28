@@ -12,15 +12,11 @@
 
 <p align="center">
   <a href="https://github.com/Nozbe/WatermelonDB/blob/master/LICENSE">
-    <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT License">
-  </a>
-
-  <a href="https://travis-ci.com/Nozbe/WatermelonDB">
-    <img src="https://api.travis-ci.com/Nozbe/WatermelonDB.svg?branch=master" alt="CI Status">
+    <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT License"/>
   </a>
 
   <a href="https://www.npmjs.com/package/@nozbe/watermelondb">
-    <img src="https://img.shields.io/npm/v/@nozbe/watermelondb.svg" alt="npm">
+    <img src="https://img.shields.io/npm/v/@nozbe/watermelondb.svg" alt="npm"/>
   </a>
 </p>
 
@@ -30,8 +26,9 @@
 | 📈 | **Highly scalable** from hundreds to tens of thousands of records |
 | 😎 | **Lazy loaded**. Only load data when you need it |
 | 🔄 | **Offline-first.** [Sync](https://nozbe.github.io/WatermelonDB/Advanced/Sync.html) with your own backend |
-| 📱 | **Multiplatform**. iOS, Android, and the web |
-| ⚛️ | **Works with React.** Easily plug data into components |
+| 📱 | **Multiplatform**. iOS, Android, web, and Node.js |
+| ⚛️ | **Optimized for React.** Easily plug data into components |
+| 🧰 | **Framework-agnostic.** Use JS API to plug into other UI frameworks |
 | ⏱ | **Fast.** And getting faster with every release! |
 | ✅ | **Proven.** Powers [Nozbe Teams](https://nozbe.com/teams) since 2017 (and [many others](#who-uses-watermelondb)) |
 | ✨ | **Reactive.** (Optional) [RxJS](https://github.com/ReactiveX/rxjs) API |
@@ -52,7 +49,7 @@ But unlike using SQLite directly, Watermelon is **fully observable**. So wheneve
 
 | <a href="https://www.youtube.com/watch?v=UlZ1QnFF4Cw"><img src="https://github.com/Nozbe/WatermelonDB/raw/master/assets/watermelon-talk-thumbnail.jpg" alt="React Native EU: Next-generation React Databases" width="300" /></a> | <a href="https://watermelondb.now.sh/"><img src="https://github.com/Nozbe/WatermelonDB/raw/master/assets/watermelon-demo-thumbnail.png" alt="WatermelonDB Demo" width="300" /></a> |
 | ---- | --- |
-| <p align="center"><a href="https://www.youtube.com/watch?v=UlZ1QnFF4Cw">📺 <strong>Next-generation React databases</strong><br>(a talk about WatermelonDB)</a></p> | <p align="center"><a href="https://watermelondb.now.sh/">✨ <strong>Check out web Demo</strong></a></p> |
+| <p align="center"><a href="https://www.youtube.com/watch?v=UlZ1QnFF4Cw">📺 <strong>Next-generation React databases</strong><br/>(a talk about WatermelonDB)</a></p> | <p align="center"><a href="https://watermelondb.now.sh/">✨ <strong>Check out web Demo</strong></a></p> |
 
 ## Usage
 
@@ -97,7 +94,7 @@ const Post = ({ post, comments }) => (
     <Text>{post.name}</Text>
     <Text>Comments:</Text>
     {comments.map(comment =>
-      <Comment key={comment.id} comment={comment} />
+      <EnhancedComment key={comment.id} comment={comment} />
     )}
   </View>
 )
@@ -118,42 +115,73 @@ The result is fully reactive! Whenever a post or comment is added, changed, or r
     <img src="https://github.com/Nozbe/WatermelonDB/raw/master/assets/apps/nozbe-teams.png" alt="Nozbe Teams" width="300" />
   </a>
 
-  <br>
+  <br/>
 
   <a href="https://capmo.de">
     <img src="https://github.com/Nozbe/WatermelonDB/raw/master/assets/apps/capmo.png" alt="CAPMO" width="300" />
   </a>
 
-  <br>
+  <br/>
 
-  <a href="https://steady.health">
-    <img src="https://github.com/Nozbe/WatermelonDB/raw/master/assets/apps/steady.png" alt="Steady" width="150">
+  <a href="https://mattermost.com/">
+    <img src="https://github.com/Nozbe/WatermelonDB/raw/master/assets/apps/mattermost.png" alt="Mattermost" width="300" />
   </a>
 
-  <br>
+  <br/>
+
+  <a href="https://rocket.chat/">
+    <img src="https://github.com/Nozbe/WatermelonDB/raw/master/assets/apps/rocketchat.png" alt="Rocket Chat" width="300" />
+  </a>
+
+  <br/>
+
+  <a href="https://steady.health">
+    <img src="https://github.com/Nozbe/WatermelonDB/raw/master/assets/apps/steady.png" alt="Steady" width="150"/>
+  </a>
+
+  <br/>
 
   <a href="https://aerobotics.com">
     <img src="https://github.com/Nozbe/WatermelonDB/raw/master/assets/apps/aerobotics.png" alt="Aerobotics" width="300" />
   </a>
 
-  <br>
+  <br/>
 
   <a href="https://smashappz.com">
     <img src="https://github.com/Nozbe/WatermelonDB/raw/master/assets/apps/smashappz.jpg" alt="Smash Appz" width="300" />
   </a>
 
-  <br>
-
-  <a href="https://rocket.chat/">
-    <img src="https://github.com/Nozbe/WatermelonDB/raw/master/assets/apps/rocketchat.png" alt="Rocket Chat" width="300" />
-  </a>
-  
-  <br>
+  <br/>
 
   <a href="https://halogo.com.au/">
     <img src="https://github.com/Nozbe/WatermelonDB/raw/master/assets/apps/halogo_logo.png" alt="HaloGo" width="300" />
   </a>
-  <br>
+
+  <br/>
+
+  <a href="https://sportsrecruits.com/">
+    <img src="https://github.com/Nozbe/WatermelonDB/raw/master/assets/apps/sportsrecruits-logo.png" alt="SportsRecruits" width="300" />
+  </a>
+
+  <br/>
+
+  <a href="https://chatable.io/">
+    <img src="https://github.com/Nozbe/WatermelonDB/raw/master/assets/apps/chatable_logo.png" alt="Chatable" width="300" />
+  </a>
+
+  <br/>
+
+  <a href="https://todorant.com/">
+    <img src="https://github.com/Nozbe/WatermelonDB/raw/master/assets/apps/todorant-logo.png" alt="Todorant" width="300" />
+  </a>
+
+  <br/>
+
+  <a href="https://blastworkout.app/">
+    <img src="https://github.com/Nozbe/WatermelonDB/raw/master/assets/apps/blastworkout-logo.png" alt="Blast Workout" width="300" />
+  </a>
+
+  <br/>
 
 _Does your company or app use 🍉? Open a pull request and add your logo/icon with link here!_
 
@@ -171,8 +199,10 @@ If you make or are considering making an app using WatermelonDB, please let us k
 
 ## Author and license
 
-**WatermelonDB** was created by [@Nozbe](https://github.com/Nozbe). Main author and maintainer is [Radek Pietruszewski](https://github.com/radex).
+**WatermelonDB** was created by [@Nozbe](https://github.com/Nozbe).
 
-**Contributors:** [@mobily](https://github.com/mobily), [@kokusGr](https://github.com/kokusGr), [@rozPierog](https://github.com/rozPierog), [@rkrajewski](https://github.com/rkrajewski), [@domeknn](https://github.com/domeknn), [@Tereszkiewicz](https://github.com/Tereszkiewicz) and [more](https://github.com/Nozbe/WatermelonDB/graphs/contributors).
+**WatermelonDB's** main author and maintainer is [Radek Pietruszewski](https://github.com/radex) ([website](https://radex.io) ⋅ [twitter](https://twitter.com/radexp) ⋅ [engineering posters](https://beamvalley.com))
+
+[See all contributors](https://github.com/Nozbe/WatermelonDB/graphs/contributors).
 
 WatermelonDB is available under the MIT license. See the [LICENSE file](./LICENSE) for more info.

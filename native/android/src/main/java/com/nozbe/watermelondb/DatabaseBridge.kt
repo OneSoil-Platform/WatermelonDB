@@ -2,23 +2,26 @@ package com.nozbe.watermelondb
 
 import android.database.SQLException
 import android.os.Trace
+import com.facebook.react.bridge.Arguments
+import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
-import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReadableArray
-import com.facebook.react.bridge.Arguments
-import kotlin.collections.ArrayList
+import com.facebook.react.bridge.WritableArray
+import com.nozbe.watermelondb.utils.MigrationSet
+import com.nozbe.watermelondb.utils.Schema
 import java.util.logging.Logger
 
 class DatabaseBridge(private val reactContext: ReactApplicationContext) :
-        ReactContextBaseJavaModule(reactContext) {
+    ReactContextBaseJavaModule(reactContext) {
+    companion object {
+        const val NAME = "DatabaseBridge"
+    }
 
     private val connections: MutableMap<ConnectionTag, Connection> = mutableMapOf()
 
-    private val log: Logger? = if (BuildConfig.DEBUG) Logger.getLogger("DB_Bridge") else null
-
-    override fun getName(): String = "DatabaseBridge"
+    override fun getName(): String = NAME
 
     sealed class Connection {
         class Connected(val driver: DatabaseDriver) : Connection()
@@ -36,6 +39,7 @@ class DatabaseBridge(private val reactContext: ReactApplicationContext) :
         tag: ConnectionTag,
         databaseName: String,
         schemaVersion: Int,
+        unsafeNativeReuse: Boolean,
         promise: Promise
     ) {
         assert(connections[tag] == null) { "A driver with tag $tag already set up" }
@@ -43,11 +47,12 @@ class DatabaseBridge(private val reactContext: ReactApplicationContext) :
 
         try {
             connections[tag] = Connection.Connected(
-                    driver = DatabaseDriver(
-                            context = reactContext,
-                            dbName = databaseName,
-                            schemaVersion = schemaVersion
-                    )
+                driver = DatabaseDriver(
+                    context = reactContext,
+                    dbName = databaseName,
+                    schemaVersion = schemaVersion,
+                    unsafeNativeReuse = unsafeNativeReuse,
+                )
             )
             promiseMap.putString("code", "ok")
             promise.resolve(promiseMap)
@@ -71,18 +76,17 @@ class DatabaseBridge(private val reactContext: ReactApplicationContext) :
         databaseName: String,
         schema: SQL,
         schemaVersion: SchemaVersion,
+        unsafeNativeReuse: Boolean,
         promise: Promise
     ) = connectDriver(
-            connectionTag = tag,
-            driver = DatabaseDriver(
-                    context = reactContext,
-                    dbName = databaseName,
-                    schema = Schema(
-                            version = schemaVersion,
-                            sql = schema
-                    )
-            ),
-            promise = promise
+        connectionTag = tag,
+        driver = DatabaseDriver(
+            context = reactContext,
+            dbName = databaseName,
+            schema = Schema(schemaVersion, schema),
+            unsafeNativeReuse = unsafeNativeReuse,
+        ),
+        promise = promise,
     )
 
     @ReactMethod
@@ -92,21 +96,19 @@ class DatabaseBridge(private val reactContext: ReactApplicationContext) :
         migrations: SQL,
         fromVersion: SchemaVersion,
         toVersion: SchemaVersion,
+        unsafeNativeReuse: Boolean,
         promise: Promise
     ) {
         try {
             connectDriver(
-                    connectionTag = tag,
-                    driver = DatabaseDriver(
-                            context = reactContext,
-                            dbName = databaseName,
-                            migrations = MigrationSet(
-                                    from = fromVersion,
-                                    to = toVersion,
-                                    sql = migrations
-                            )
-                    ),
-                    promise = promise
+                connectionTag = tag,
+                driver = DatabaseDriver(
+                    context = reactContext,
+                    dbName = databaseName,
+                    migrations = MigrationSet(fromVersion, toVersion, migrations),
+                    unsafeNativeReuse = unsafeNativeReuse,
+                ),
+                promise = promise,
             )
         } catch (e: Exception) {
             disconnectDriver(tag)
@@ -136,31 +138,32 @@ class DatabaseBridge(private val reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun find(tag: ConnectionTag, table: TableName, id: RecordID, promise: Promise) =
-            withDriver(tag, promise) { it.find(table, id) }
+        withDriver(tag, promise) { it.find(table, id) }
 
     @ReactMethod
-    fun query(tag: ConnectionTag, table: TableName, query: SQL, promise: Promise) =
-            withDriver(tag, promise) { it.cachedQuery(table, query) }
+    fun query(
+        tag: ConnectionTag,
+        table: TableName,
+        query: SQL,
+        args: ReadableArray,
+        promise: Promise
+    ) = withDriver(tag, promise) { it.cachedQuery(table, query, args.toArrayList().toArray()) }
 
     @ReactMethod
-    fun count(tag: ConnectionTag, query: SQL, promise: Promise) =
-            withDriver(tag, promise) { it.count(query) }
+    fun queryIds(tag: ConnectionTag, query: SQL, args: ReadableArray, promise: Promise) =
+        withDriver(tag, promise) { it.queryIds(query, args.toArrayList().toArray()) }
+
+    @ReactMethod
+    fun unsafeQueryRaw(tag: ConnectionTag, query: SQL, args: ReadableArray, promise: Promise) =
+        withDriver(tag, promise) { it.unsafeQueryRaw(query, args.toArrayList().toArray()) }
+
+    @ReactMethod
+    fun count(tag: ConnectionTag, query: SQL, args: ReadableArray, promise: Promise) =
+        withDriver(tag, promise) { it.count(query, args.toArrayList().toArray()) }
 
     @ReactMethod
     fun batch(tag: ConnectionTag, operations: ReadableArray, promise: Promise) =
-            withDriver(tag, promise) { it.batch(operations) }
-
-    @ReactMethod
-    fun getDeletedRecords(tag: ConnectionTag, table: TableName, promise: Promise) =
-            withDriver(tag, promise) { it.getDeletedRecords(table) }
-
-    @ReactMethod
-    fun destroyDeletedRecords(
-        tag: ConnectionTag,
-        table: TableName,
-        records: ReadableArray,
-        promise: Promise
-    ) = withDriver(tag, promise) { it.destroyDeletedRecords(table, records.toArrayList().toArray()) }
+        withDriver(tag, promise) { it.batch(operations) }
 
     @ReactMethod
     fun unsafeResetDatabase(
@@ -178,15 +181,33 @@ class DatabaseBridge(private val reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun getLocal(tag: ConnectionTag, key: String, promise: Promise) =
-            withDriver(tag, promise) { it.getLocal(key) }
+        withDriver(tag, promise) { it.getLocal(key) }
 
-    @ReactMethod
-    fun setLocal(tag: ConnectionTag, key: String, value: String, promise: Promise) =
-            withDriver(tag, promise) { it.setLocal(key, value) }
-
-    @ReactMethod
-    fun removeLocal(tag: ConnectionTag, key: String, promise: Promise) =
-            withDriver(tag, promise) { it.removeLocal(key) }
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    fun unsafeGetLocalSynchronously(tag: ConnectionTag, key: String): WritableArray {
+        try {
+            when (
+                val connection =
+                    connections[tag] ?: throw (Exception("No driver with tag $tag available"))
+            ) {
+                is Connection.Connected -> {
+                    val value = connection.driver.getLocal(key)
+                    return Arguments.createArray().also {
+                        it.pushString("result")
+                        it.pushString(value)
+                    }
+                }
+                is Connection.Waiting -> {
+                    throw Exception("Waiting connection unexpected for unsafeGetLocalSynchronously")
+                }
+            }
+        } catch (e: Exception) {
+            return Arguments.createArray().also {
+                it.pushString("error")
+                it.pushString(e.message)
+            }
+        }
+    }
 
     @Throws(Exception::class)
     private fun withDriver(
@@ -197,16 +218,21 @@ class DatabaseBridge(private val reactContext: ReactApplicationContext) :
         val functionName = function.javaClass.enclosingMethod?.name
         try {
             Trace.beginSection("DatabaseBridge.$functionName")
-            when (val connection =
+            when (
+                val connection =
                     connections[tag] ?: promise.reject(
-                            Exception("No driver with tag $tag available"))) {
+                        Exception("No driver with tag $tag available")
+                    )
+            ) {
                 is Connection.Connected -> {
                     val result = function(connection.driver)
-                    promise.resolve(if (result === Unit) {
-                        true
-                    } else {
-                        result
-                    })
+                    promise.resolve(
+                        if (result === Unit) {
+                            true
+                        } else {
+                            result
+                        }
+                    )
                 }
                 is Connection.Waiting -> {
                     // try again when driver is ready
@@ -241,6 +267,34 @@ class DatabaseBridge(private val reactContext: ReactApplicationContext) :
 
         for (operation in queue) {
             operation()
+        }
+    }
+
+    @ReactMethod
+    fun provideSyncJson(id: Int, json: String, promise: Promise) {
+        // Note: WatermelonJSI is optional on Android, but we don't want users to have to set up
+        // yet another NativeModule, so we're using Reflection to access it from here
+        val clazz = Class.forName("com.nozbe.watermelondb.jsi.WatermelonJSI")
+        val method =
+            clazz.getDeclaredMethod("provideSyncJson", Int::class.java, ByteArray::class.java)
+        method.invoke(null, id, json.toByteArray())
+        promise.resolve(true)
+    }
+
+    override fun onCatalystInstanceDestroy() {
+        // NOTE: See Database::install() for explanation
+        super.onCatalystInstanceDestroy()
+        reactContext.catalystInstance.reactQueueConfiguration.jsQueueThread.runOnQueue {
+            try {
+                val clazz = Class.forName("com.nozbe.watermelondb.jsi.WatermelonJSI")
+                val method = clazz.getDeclaredMethod("onCatalystInstanceDestroy")
+                method.invoke(null)
+            } catch (e: Exception) {
+                if (BuildConfig.DEBUG) {
+                    Logger.getLogger("DB_Bridge")
+                        .info("Could not find JSI onCatalystInstanceDestroy")
+                }
+            }
         }
     }
 }

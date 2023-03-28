@@ -1,6 +1,4 @@
-declare module '@nozbe/watermelondb/decorators/date' {
-  import { ColumnName } from '@nozbe/watermelondb'
+import { ColumnName } from '../../Schema'
 
-  const date: (columnName: ColumnName) => PropertyDecorator
-  export default date
-}
+declare function date(columnName: ColumnName): PropertyDecorator
+export default date

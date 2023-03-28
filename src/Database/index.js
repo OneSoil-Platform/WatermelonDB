@@ -1,93 +1,122 @@
 // @flow
 
-import type { Observable } from 'rxjs/Observable'
-import { merge as merge$ } from 'rxjs/observable/merge'
-import { startWith } from 'rxjs/operators'
-import { values } from 'rambdax'
-
+import { type Observable, startWith, merge as merge$ } from '../utils/rx'
 import { type Unsubscribe } from '../utils/subscriptions'
-import { invariant } from '../utils/common'
-import { noop } from '../utils/fp'
+import { invariant, logger } from '../utils/common'
+import {
+  noop,
+  fromArrayOrSpread,
+  // eslint-disable-next-line no-unused-vars
+  type ArrayOrSpreadFn,
+} from '../utils/fp'
 
 import type { DatabaseAdapter, BatchOperation } from '../adapters/type'
 import DatabaseAdapterCompat from '../adapters/compat'
 import type Model from '../Model'
 import type Collection, { CollectionChangeSet } from '../Collection'
-import { CollectionChangeTypes } from '../Collection/common'
 import type { TableName, AppSchema } from '../Schema'
 
 import CollectionMap from './CollectionMap'
-import ActionQueue, { type ActionInterface } from './ActionQueue'
+import type LocalStorage from './LocalStorage'
+import WorkQueue, { type ReaderInterface, type WriterInterface } from './WorkQueue'
 
 type DatabaseProps = $Exact<{
   adapter: DatabaseAdapter,
   modelClasses: Array<Class<Model>>,
-  actionsEnabled: boolean,
 }>
 
+let experimentalAllowsFatalError = false
+
+export function setExperimentalAllowsFatalError(): void {
+  experimentalAllowsFatalError = true
+}
+
 export default class Database {
+  /**
+   * Database's adapter - the low-level connection with the underlying database (e.g. SQLite)
+   *
+   * Unless you understand WatermelonDB's internals, you SHOULD NOT use adapter directly.
+   * Running queries, or updating/deleting records on the adapter will corrupt the in-memory cache
+   * if special care is not taken
+   */
   adapter: DatabaseAdapterCompat
 
   schema: AppSchema
 
   collections: CollectionMap
 
-  _actionQueue = new ActionQueue()
+  _workQueue: WorkQueue = new WorkQueue(this)
 
-  _actionsEnabled: boolean
+  // (experimental) if true, Database is in a broken state and should not be used anymore
+  _isBroken: boolean = false
 
-  constructor({ adapter, modelClasses, actionsEnabled }: DatabaseProps): void {
+  _localStorage: LocalStorage
+
+  constructor(options: DatabaseProps): void {
+    const { adapter, modelClasses } = options
     if (process.env.NODE_ENV !== 'production') {
       invariant(adapter, `Missing adapter parameter for new Database()`)
       invariant(
         modelClasses && Array.isArray(modelClasses),
         `Missing modelClasses parameter for new Database()`,
       )
-      invariant(
-        actionsEnabled === true || actionsEnabled === false,
-        'You must pass `actionsEnabled:` key to Database constructor. It is highly recommended you pass `actionsEnabled: true` (see documentation for more details), but can pass `actionsEnabled: false` for backwards compatibility.',
-      )
     }
     this.adapter = new DatabaseAdapterCompat(adapter)
     this.schema = adapter.schema
     this.collections = new CollectionMap(this, modelClasses)
-    this._actionsEnabled = actionsEnabled
   }
 
+  /**
+   * Returns a `Collection` for a given table name
+   */
   get<T: Model>(tableName: TableName<T>): Collection<T> {
     return this.collections.get(tableName)
   }
 
-  // Executes multiple prepared operations
-  // (made with `collection.prepareCreate` and `record.prepareUpdate`)
-  // Note: falsy values (null, undefined, false) passed to batch are just ignored
-  async batch(...records: $ReadOnlyArray<Model | null | void | false>): Promise<void> {
-    if (!Array.isArray(records[0])) {
-      // $FlowFixMe
-      return this.batch(records)
+  /**
+   * Returns a `LocalStorage` (WatermelonDB-based localStorage/AsyncStorage alternative)
+   */
+  get localStorage(): LocalStorage {
+    if (!this._localStorage) {
+      const LocalStorageClass = require('./LocalStorage').default
+      this._localStorage = new LocalStorageClass(this)
     }
-    invariant(
-      records.length === 1,
-      'batch should be called with a list of models or a single array',
-    )
-    const actualRecords = records[0]
+    return this._localStorage
+  }
 
-    this._ensureInAction(
-      `Database.batch() can only be called from inside of an Action. See docs for more details.`,
-    )
+  /*:: batch: ArrayOrSpreadFn<?Model | false, Promise<void>>  */
+  /**
+   * Executes multiple prepared operations
+   *
+   * Pass a list (or array) of operations like so:
+   * - `collection.prepareCreate(...)`
+   * - `record.prepareUpdate(...)`
+   * - `record.prepareMarkAsDeleted()` (or `record.prepareDestroyPermanently()`)
+   *
+   * Note that falsy values (null, undefined, false) passed to batch are simply ignored
+   * so you can use patterns like `.batch(condition && record.prepareUpdate(...))` for convenience.
+   *
+   * Note: This method must be called within a Writer {@link Database#write}.
+   */
+  // $FlowFixMe
+  async batch(...records: Array<?Model | false>): Promise<void> {
+    const actualRecords: Array<?Model> = fromArrayOrSpread(records, 'Database.batch', 'Model')
+
+    this._ensureInWriter(`Database.batch()`)
 
     // performance critical - using mutations
     const batchOperations: BatchOperation[] = []
-    const changeNotifications: { [collectionName: TableName<any>]: CollectionChangeSet<*> } = {}
-    actualRecords.forEach(record => {
+    const changeNotifications: { [TableName<any>]: CollectionChangeSet<Model> } = {}
+    actualRecords.forEach((record) => {
       if (!record) {
         return
       }
 
-      invariant(
-        !record._isCommitted || record._hasPendingUpdate || record._hasPendingDelete,
-        `Cannot batch a record that doesn't have a prepared create or prepared update`,
-      )
+      const preparedState = record._preparedState
+      if (!preparedState) {
+        invariant(record._raw._status !== 'disposable', `Cannot batch a disposable record`)
+        throw new Error(`Cannot batch a record that doesn't have a prepared create/update/delete`)
+      }
 
       const raw = record._raw
       const { id } = raw // faster than Model.id
@@ -95,21 +124,27 @@ export default class Database {
 
       let changeType
 
-      // Deletes take presedence over updates
-      if (record._hasPendingDelete) {
-        if (record._hasPendingDelete === 'destroy') {
-          batchOperations.push(['destroyPermanently', table, id])
-        } else {
-          batchOperations.push(['markAsDeleted', table, id])
-        }
-        changeType = CollectionChangeTypes.destroyed
-      } else if (record._hasPendingUpdate) {
-        record._hasPendingUpdate = false // TODO: What if this fails?
+      if (preparedState === 'update') {
         batchOperations.push(['update', table, raw])
-        changeType = CollectionChangeTypes.updated
-      } else {
+        changeType = 'updated'
+      } else if (preparedState === 'create') {
         batchOperations.push(['create', table, raw])
-        changeType = CollectionChangeTypes.created
+        changeType = 'created'
+      } else if (preparedState === 'markAsDeleted') {
+        batchOperations.push(['markAsDeleted', table, id])
+        changeType = 'destroyed'
+      } else if (preparedState === 'destroyPermanently') {
+        batchOperations.push(['destroyPermanently', table, id])
+        changeType = 'destroyed'
+      } else {
+        invariant(false, 'bad preparedState')
+      }
+
+      if (preparedState !== 'create') {
+        // We're (unsafely) assuming that batch will succeed and removing the "pending" state so that
+        // subsequent changes to the record don't trip up the invariant
+        // TODO: What if this fails?
+        record._preparedState = null
       }
 
       if (!changeNotifications[table]) {
@@ -121,59 +156,132 @@ export default class Database {
     await this.adapter.batch(batchOperations)
 
     // NOTE: We must make two passes to ensure all changes to caches are applied before subscribers are called
-    Object.entries(changeNotifications).forEach(notification => {
-      const [table, changeSet]: [TableName<any>, CollectionChangeSet<any>] = (notification: any)
+    const changes: [TableName<any>, CollectionChangeSet<any>][] = (Object.entries(
+      changeNotifications,
+    ): any)
+
+    changes.forEach(([table, changeSet]) => {
       this.collections.get(table)._applyChangesToCache(changeSet)
     })
 
-    Object.entries(changeNotifications).forEach(notification => {
-      const [table, changeSet]: [TableName<any>, CollectionChangeSet<any>] = (notification: any)
-      this.collections.get(table)._notify(changeSet)
-    })
+    this._notify(changes)
 
-    const affectedTables = Object.keys(changeNotifications)
-    const databaseChangeNotifySubscribers = ([tables, subscriber]): void => {
-      if (tables.some(table => affectedTables.includes(table))) {
+    return undefined // shuts up flow
+  }
+
+  _pendingNotificationBatches: number = 0
+  _pendingNotificationChanges: [TableName<any>, CollectionChangeSet<any>][][] = []
+
+  _notify(changes: [TableName<any>, CollectionChangeSet<any>][]): void {
+    if (this._pendingNotificationBatches > 0) {
+      this._pendingNotificationChanges.push(changes)
+      return
+    }
+
+    const affectedTables = new Set(changes.map(([table]) => table))
+
+    const databaseChangeNotifySubscribers = ([tables, subscriber]: [
+      Array<TableName<any>>,
+      () => void,
+      any,
+    ]): void => {
+      if (tables.some((table) => affectedTables.has(table))) {
         subscriber()
       }
     }
     this._subscribers.forEach(databaseChangeNotifySubscribers)
-    return undefined // shuts up flow
+
+    changes.forEach(([table, changeSet]) => {
+      this.collections.get(table)._notify(changeSet)
+    })
   }
 
-  // Enqueues an Action -- a block of code that, when its ran, has a guarantee that no other Action
-  // is running at the same time.
-  // If Database is instantiated with actions enabled, all write actions (create, update, delete)
-  // must be performed inside Actions, so Actions guarantee a write lock.
-  //
-  // See docs for more details and practical guide
-  action<T>(work: ActionInterface => Promise<T>, description?: string): Promise<T> {
-    return this._actionQueue.enqueue(work, description)
+  async experimentalBatchNotifications<T>(work: () => Promise<T>): Promise<T> {
+    // TODO: Document & add tests if this proves useful
+    try {
+      this._pendingNotificationBatches += 1
+      const result = await work()
+      return result
+    } finally {
+      this._pendingNotificationBatches -= 1
+      if (this._pendingNotificationBatches === 0) {
+        const changes = this._pendingNotificationChanges
+        this._pendingNotificationChanges = []
+        changes.forEach((_changes) => this._notify(_changes))
+      }
+    }
   }
 
-  /* EXPERIMENTAL API - DO NOT USE */
-  _write<T>(work: ActionInterface => Promise<T>, description?: string): Promise<T> {
-    return this._actionQueue.enqueue(work, description)
+  /**
+   * Schedules a Writer
+   *
+   * Writer is a block of code, inside of which you can modify the database
+   * (call `Collection.create`, `Model.update`, `Database.batch` and so on).
+   *
+   * In a Writer, you're guaranteed that no other Writer is simultaneously executing. Therefore, you
+   * can rely on the results of queries and other asynchronous operations - they won't change for
+   * the duration of this Writer (except if changed by it).
+   *
+   * To call another Writer (or Reader) from this one without deadlocking, use `callWriter`
+   * (or `callReader`).
+   *
+   * See docs for more details and a practical guide.
+   *
+   * @param work - Block of code to execute
+   * @param [description] - Debug description of this Writer
+   */
+  write<T>(work: (WriterInterface) => Promise<T>, description?: string): Promise<T> {
+    return this._workQueue.enqueue(work, description, true)
   }
 
-  _read<T>(work: ActionInterface => Promise<T>, description?: string): Promise<T> {
-    return this._actionQueue.enqueue(work, description)
+  /**
+   * Schedules a Reader
+   *
+   * In a Reader, you're guaranteed that no Writer is running at the same time. Therefore, you can
+   * run many queries or other asynchronous operations, and you can rely on their results - they
+   * won't change for the duration of this Reader. However, other Readers might run concurrently.
+   *
+   * To call another Reader from this one, use `callReader`
+   *
+   * See docs for more details and a practical guide.
+   *
+   * @param work - Block of code to execute
+   * @param [description] - Debug description of this Reader
+   */
+  read<T>(work: (ReaderInterface) => Promise<T>, description?: string): Promise<T> {
+    return this._workQueue.enqueue(work, description, false)
   }
 
-  _together<T>(work: ActionInterface => Promise<T>, description?: string): Promise<T> {
-    return this._actionQueue.enqueue(work, description)
-  }
-
-  // Emits a signal immediately, and on change in any of the passed tables
+  /**
+   * Returns an `Observable` that emits a signal (`null`) immediately, and on every change in
+   * any of the passed tables.
+   *
+   * A set of changes made is passed with the signal, with an array of changes per-table
+   * (Currently, if changes are made to multiple different tables, multiple signals will be emitted,
+   * even if they're made with a batch. However, this behavior might change. Use Rx to debounce,
+   * throttle, merge as appropriate for your use case.)
+   *
+   * Warning: You can easily introduce performance bugs in your application by using this method
+   * inappropriately.
+   */
   withChangesForTables(tables: TableName<any>[]): Observable<CollectionChangeSet<any> | null> {
-    const changesSignals = tables.map(table => this.collections.get(table).changes)
+    const changesSignals = tables.map((table) => this.collections.get(table).changes)
 
     return merge$(...changesSignals).pipe(startWith(null))
   }
 
   _subscribers: [TableName<any>[], () => void, any][] = []
 
-  // Notifies `subscriber` on change in any of passed tables (only a signal, no change set)
+  /**
+   * Notifies `subscriber` on change in any of the passed tables.
+   *
+   * A single notification will be sent per `database.batch()` call.
+   * (Currently, no details about the changes made are provided, only a signal, but this behavior
+   * might change. Currently, subscribers are called before `withChangesForTables`).
+   *
+   * Warning: You can easily introduce performance bugs in your application by using this method
+   * inappropriately.
+   */
   experimentalSubscribe(
     tables: TableName<any>[],
     subscriber: () => void,
@@ -196,24 +304,28 @@ export default class Database {
 
   _isBeingReset: boolean = false
 
-  // Resets database - permanently destroys ALL records stored in the database, and sets up empty database
-  //
-  // NOTE: This is not 100% safe automatically and you must take some precautions to avoid bugs:
-  // - You must NOT hold onto any Database objects. DO NOT store or cache any records, collections, anything
-  // - You must NOT observe any record or collection or query
-  // - You SHOULD NOT have any pending (queued) Actions. Pending actions will be aborted (will reject with an error).
-  //
-  // It's best to reset your app to an empty / logged out state before doing this.
-  //
-  // Yes, this sucks and there should be some safety mechanisms or warnings. Please contribute!
+  /**
+   * Resets the database
+   *
+   * This permanently deletes the database (all records, metadata, and `LocalStorage`) and sets
+   * up an empty database.
+   *
+   * Special care must be taken to safely reset the database. Ideally, you should reset your app
+   * to an empty / "logging out" state while doing this. Specifically:
+   *
+   * - You MUST NOT hold onto Watermelon records other than this `Database`. Do not keep references
+   *   to records, collections, or any other objects from before database reset
+   * - You MUST NOT observe any Watermelon state. All Database, Collection, Query, and Model
+   *   observers/subscribers should be disposed of before resetting
+   * - You SHOULD NOT have any pending (queued) Readers or Writers. Pending work will be aborted
+   *   (rejected with an error)
+   */
   async unsafeResetDatabase(): Promise<void> {
-    this._ensureInAction(
-      `Database.unsafeResetDatabase() can only be called from inside of an Action. See docs for more details.`,
-    )
+    this._ensureInWriter(`Database.unsafeResetDatabase()`)
     try {
       this._isBeingReset = true
       // First kill actions, to ensure no more traffic to adapter happens
-      this._actionQueue._abortPendingActions()
+      this._workQueue._abortPendingWork()
 
       // Kill ability to call adapter methods during reset (to catch bugs if someone does this)
       const { adapter } = this
@@ -236,7 +348,10 @@ export default class Database {
       await adapter.unsafeResetDatabase()
 
       // Only now clear caches, since there may have been queued fetches from DB still bringing in items to cache
-      this._unsafeClearCaches()
+      Object.values(this.collections.map).forEach((collection) => {
+        // $FlowFixMe
+        collection._cache.unsafeClear()
+      })
 
       // Restore working Database
       this._resetCount += 1
@@ -246,13 +361,31 @@ export default class Database {
     }
   }
 
-  _unsafeClearCaches(): void {
-    values(this.collections.map).forEach(collection => {
-      collection.unsafeClearCache()
-    })
+  _ensureInWriter(diagnosticMethodName: string): void {
+    invariant(
+      this._workQueue.isWriterRunning,
+      `${diagnosticMethodName} can only be called from inside of a Writer. See docs for more details.`,
+    )
   }
 
-  _ensureInAction(error: string): void {
-    this._actionsEnabled && invariant(this._actionQueue.isRunning, error)
+  // (experimental) puts Database in a broken state
+  // TODO: Not used anywhere yet
+  _fatalError(error: Error): void {
+    if (!experimentalAllowsFatalError) {
+      logger.warn(
+        'Database is now broken, but experimentalAllowsFatalError has not been enabled to do anything about it...',
+      )
+      return
+    }
+
+    this._isBroken = true
+    logger.error('Database is broken. App must be reloaded before continuing.')
+
+    // TODO: Passing this to an adapter feels wrong, but it's tricky.
+    // $FlowFixMe
+    if (this.adapter.underlyingAdapter._fatalError) {
+      // $FlowFixMe
+      this.adapter.underlyingAdapter._fatalError(error)
+    }
   }
 }
